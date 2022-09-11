@@ -1,0 +1,8 @@
+cradle:
+  stack:
+    - path: "./src"
+      component: "speff:lib"
+
+    - path: "./bench"
+      component: "speff:bench:speff-bench"
+
