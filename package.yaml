@@ -38,6 +38,7 @@ default-extensions:
 - ConstraintKinds
 - EmptyCase
 - TupleSections
+- BangPatterns
 
 ghc-options:
 - -Wall
@@ -48,10 +49,10 @@ ghc-options:
 - -Wpartial-fields
 - -Wunused-type-patterns
 # - -ddump-hi
-# - -ddump-simpl
-# - -ddump-to-file
-# - -dsuppress-all
-# - -dsuppress-uniques
+- -ddump-simpl
+- -ddump-to-file
+- -dsuppress-all
+- -dsuppress-uniques
 
 library:
   source-dirs: src

@@ -19,6 +19,7 @@ module Sp.Internal.Env
   , empty
     -- * Construction
   , cons
+  , consNull
   , type (++)
   , concat
     -- * Deconstruction
@@ -49,9 +50,9 @@ import           Unsafe.Coerce           (unsafeCoerce)
 -- slices, therefore suits small numbers of entries (/i.e./ less than 128).
 type role Rec representational nominal
 data Rec (f :: k -> Type) (es :: [k]) = Rec
-  {-# UNPACK #-} !Int -- ^ The offset.
-  {-# UNPACK #-} !Int -- ^ The length.
-  {-# UNPACK #-} !(Array Any) -- ^ The array content.
+  !Int -- ^ The offset.
+  !Int -- ^ The length.
+  !(Array Any) -- ^ The array content.
 
 -- | Get the length of the record.
 length :: Rec f es -> Int
@@ -70,6 +71,13 @@ empty = Rec 0 0 $ emptyArray
 cons :: f e -> Rec f es -> Rec f (e ': es)
 cons x (Rec off len arr) = Rec 0 (len + 1) $ runArray do
   marr <- newArray (len + 1) (toAny x)
+  copyArray marr 1 arr off len
+  pure marr
+
+-- | Prepend one null entry to the record. \( O(n) \).
+consNull :: Rec f es -> Rec f (e ': es)
+consNull (Rec off len arr) = Rec 0 (len + 1) $ runArray do
+  marr <- newArray (len + 1) (toAny ())
   copyArray marr 1 arr off len
   pure marr
 

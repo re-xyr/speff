@@ -7,20 +7,20 @@ packages:
 - completed:
     hackage: eveff-1.0.0.2@sha256:935ea6bf71e694a6e5f7548201b97acddbfd5191a716a1ba6ddee1d360031ceb,1232
     pantry-tree:
-      size: 494
       sha256: b32e015ba845a061685bc8f10368d634b82e45c7d2a509c102e5971b63166669
+      size: 494
   original:
-    hackage: eveff-1.0.0.2@sha256:935ea6bf71e694a6e5f7548201b97acddbfd5191a716a1ba6ddee1d360031ceb,1232
+    hackage: eveff-1.0.0.2
 - completed:
-    hackage: fused-effects-1.1.1.2@sha256:357994ca02d1914249c3874763556786491b0249d7a3a96bbc7b446a6bb3136c,5002
+    hackage: fused-effects-1.1.2.1@sha256:b3766ca1869a7082ddcced5a95ce60196c05b51fbd3d97aa79acb98de3940079,5261
     pantry-tree:
-      size: 6345
-      sha256: 8b8296cd0ca5d5f7a2679084d9a26c31edd91cb577f5a017b5a2ceb267b1a987
+      sha256: 1cc36756682a29c47db44db16f23b93d52b49bc1f3af82ac42faabfca7866a0b
+      size: 6845
   original:
-    hackage: fused-effects-1.1.1.2@sha256:357994ca02d1914249c3874763556786491b0249d7a3a96bbc7b446a6bb3136c,5002
+    hackage: fused-effects-1.1.2.1
 snapshots:
 - completed:
-    size: 619399
-    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/23.yaml
-    sha256: f5d9002479d87103fd070f17cfe71fcd2147676f1e47a2dabca5ab91a42b846d
-  original: lts-19.23
+    sha256: 6d1532d40621957a25bad5195bfca7938e8a06d923c91bc52aa0f3c41181f2d4
+    size: 619204
+    url: https://raw.githubusercontent.com/commercialhaskell/stackage-snapshots/master/lts/19/33.yaml
+  original: lts-19.33

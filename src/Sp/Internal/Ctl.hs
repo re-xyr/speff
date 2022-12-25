@@ -59,7 +59,7 @@ prompt f = do
   promptWith mark (f mark)
 
 promptWith :: Marker a -> Ctl a -> Ctl a
-promptWith mark m = Ctl $ unCtl m >>= \case
+promptWith !mark m = Ctl $ unCtl m >>= \case
   Pure a -> pure $ Pure a
   Raise mark' r -> case testEquality mark mark' of
     Just Refl -> unCtl r
@@ -70,11 +70,11 @@ promptWith mark m = Ctl $ unCtl m >>= \case
 
 -- yielding is not strict in f
 yield :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
-yield mark f = Ctl $ pure $ Yield mark f id
+yield !mark f = Ctl $ pure $ Yield mark f id
 
 -- raising is not strict in r
 raise :: Marker r -> Ctl r -> Ctl a
-raise mark r = Ctl $ pure $ Raise mark r
+raise !mark r = Ctl $ pure $ Raise mark r
 
 promptState :: forall s r. s -> (IORef s -> Ctl r) -> Ctl r
 promptState x0 f = do
@@ -82,7 +82,7 @@ promptState x0 f = do
   promptStateWith ref (f ref)
 
 promptStateWith :: IORef s -> Ctl r -> Ctl r
-promptStateWith ref (Ctl m) = Ctl $ m >>= \case
+promptStateWith !ref (Ctl m) = Ctl $ m >>= \case
   Pure x -> pure $ Pure x
   Raise mark x -> pure $ Raise mark x
   Yield mark ctl cont -> do

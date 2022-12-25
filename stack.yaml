@@ -1,8 +1,8 @@
-resolver: lts-19.23
+resolver: lts-19.33
 
 packages:
 - .
 
 extra-deps:
-- eveff-1.0.0.2@sha256:935ea6bf71e694a6e5f7548201b97acddbfd5191a716a1ba6ddee1d360031ceb,1232
-- fused-effects-1.1.1.2@sha256:357994ca02d1914249c3874763556786491b0249d7a3a96bbc7b446a6bb3136c,5002
+- eveff-1.0.0.2
+- fused-effects-1.1.2.1

@@ -27,8 +27,8 @@ import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.IORef             (IORef)
 import           Data.Kind              (Type)
 import           Sp.Internal.Ctl
-import           Sp.Internal.Env        (Rec, (:>))
 import qualified Sp.Internal.Env        as Rec
+import           Sp.Internal.Env        (Rec, (:>))
 import           System.IO.Unsafe       (unsafeDupablePerformIO)
 
 -- | The kind of higher-order effects.
@@ -59,9 +59,7 @@ instance Monad (Eff es) where
 -- | The handler token; it is parameterized by an existential sender environment so as not to let it escape the handler
 -- scope.
 type role Handling nominal nominal representational
-data Handling (esSend :: [Effect]) (es :: [Effect]) (r :: Type) = Handling
-  {-# UNPACK #-} !(Env es)
-  {-# UNPACK #-} !(Marker r)
+data Handling (esSend :: [Effect]) (es :: [Effect]) (r :: Type) = Handling (Env es) !(Marker r)
 
 -- | The type of effect handlers.
 type Handler e es r = forall esSend a. e :> esSend => Handling esSend es r -> e (Eff esSend) a -> Eff esSend a
@@ -82,11 +80,11 @@ toInternalHandler mark es hdl = InternalHandler \e -> hdl (Handling es mark) e
 {-# INLINE toInternalHandler #-}
 
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
-alter f (Eff m) = Eff \es -> m (f es)
+alter f (Eff m) = Eff \es -> m $! f es
 {-# INLINE alter #-}
 
 handle :: Handler e es' a -> (InternalHandler e -> Env es' -> Env es) -> Eff es a -> Eff es' a
-handle hdl f (Eff m) = Eff \es -> prompt \mark -> m (f (toInternalHandler mark es hdl) es)
+handle hdl f (Eff m) = Eff \es -> prompt \mark -> m $! f (toInternalHandler mark es hdl) es
 {-# INLINE handle #-}
 
 -- | Handle an effect.
@@ -133,7 +131,7 @@ embed (Handling es _) (Eff m) = Eff (const $ m es)
 -- | Perform an operation from the handle-site, while being able to convert an operation from the perform-site to the
 -- handle-site.
 withUnembed :: Handling esSend es r -> (forall tag. (Eff esSend a -> Eff (Localized tag : es) a) -> Eff (Localized tag : es) a) -> Eff esSend a
-withUnembed (Handling es _) f = Eff \esSend -> unEff (f \(Eff m) -> Eff (const $ m esSend)) (Rec.cons undefined es)
+withUnembed (Handling es _) f = Eff \esSend -> unEff (f \(Eff m) -> Eff (const $ m esSend)) $! Rec.consNull es
 {-# INLINE withUnembed #-}
 
 -- | Abort with a result value.
@@ -143,7 +141,7 @@ abort (Handling es mark) (Eff m) = Eff (const $ raise mark (m es))
 
 -- | Yield and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
 control :: Handling esSend es r -> (forall tag. (Eff esSend a -> Eff (Localized tag : es) r) -> Eff (Localized tag : es) r) -> Eff esSend a
-control (Handling es mark) f = Eff \esSend -> yield mark \cont -> unEff (f \(Eff x) -> Eff (const $ cont $ x esSend)) (Rec.cons undefined es)
+control (Handling es mark) f = Eff \esSend -> yield mark \cont -> unEff (f \(Eff x) -> Eff (const $ cont $ x esSend)) $! Rec.consNull es
 {-# INLINE control #-}
 
 -- | Unpack the 'Eff' monad.

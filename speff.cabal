@@ -1,6 +1,6 @@
 cabal-version: 1.12
 
--- This file has been generated from package.yaml by hpack version 0.34.4.
+-- This file has been generated from package.yaml by hpack version 0.35.0.
 --
 -- see: https://github.com/sol/hpack
 
@@ -55,7 +55,8 @@ library
       ConstraintKinds
       EmptyCase
       TupleSections
-  ghc-options: -Wall -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors -Wpartial-fields -Wunused-type-patterns
+      BangPatterns
+  ghc-options: -Wall -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors -Wpartial-fields -Wunused-type-patterns -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
   build-depends:
       atomic-primops
     , base
@@ -95,7 +96,8 @@ benchmark speff-bench
       ConstraintKinds
       EmptyCase
       TupleSections
-  ghc-options: -Wall -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors -Wpartial-fields -Wunused-type-patterns -rtsopts -with-rtsopts=-T
+      BangPatterns
+  ghc-options: -Wall -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors -Wpartial-fields -Wunused-type-patterns -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques -rtsopts -with-rtsopts=-T
   build-depends:
       atomic-primops
     , base

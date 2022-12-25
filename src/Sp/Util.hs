@@ -47,7 +47,7 @@ local :: Reader r :> es => (r -> r) -> Eff es a -> Eff es a
 local f m = send (Local f m)
 
 handleReader :: r -> Handler (Reader r) es a
-handleReader r _ = \case
+handleReader !r _ = \case
   Ask       -> pure r
   Local f m -> interpose (handleReader (f r)) m
 
