@@ -10,8 +10,8 @@ import           System.IO.Unsafe       (unsafePerformIO)
 import           Unsafe.Coerce          (unsafeCoerce)
 
 uniqueSource :: AtomicCounter
-{-# NOINLINE uniqueSource #-}
 uniqueSource = unsafePerformIO (newCounter 0)
+{-# NOINLINE uniqueSource #-}
 
 freshMarker :: forall a. Ctl (Marker a)
 freshMarker = liftIO $ Marker <$> incrCounter 1 uniqueSource

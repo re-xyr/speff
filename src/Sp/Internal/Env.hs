@@ -37,14 +37,15 @@ module Sp.Internal.Env
   , update
   ) where
 
-import           Control.Monad.Primitive (PrimMonad (PrimState))
-import           Data.Kind               (Type)
-import           Data.Primitive.Array    (Array, MutableArray, cloneArray, copyArray, emptyArray, indexArray, newArray,
-                                          runArray, thawArray, writeArray)
-import           GHC.Exts                (Any)
-import           GHC.TypeLits            (ErrorMessage (ShowType, Text, (:<>:)), TypeError)
-import           Prelude                 hiding (concat, drop, head, length, tail, take)
-import           Unsafe.Coerce           (unsafeCoerce)
+import           Control.Monad.ST     (ST)
+import           Data.Foldable        (for_)
+import           Data.Kind            (Type)
+import           Data.Primitive.Array (Array, MutableArray, cloneArray, copyArray, emptyArray, indexArray, indexArrayM,
+                                       newArray, runArray, thawArray, writeArray)
+
+import           GHC.TypeLits         (ErrorMessage (ShowType, Text, (:<>:)), TypeError)
+import           Prelude              hiding (concat, drop, head, length, tail, take)
+import           Sp.Internal.Util     (Any, fromAny, pattern Any)
 
 -- | Extensible record type supporting efficient \( O(1) \) reads. The underlying implementation is 'Array'
 -- slices, therefore suits small numbers of entries (/i.e./ less than 128).
@@ -59,7 +60,7 @@ length :: Rec f es -> Int
 length (Rec _ len _) = len
 
 -- | Create a new 'MutableArray' with no contents.
-newArr :: PrimMonad m => Int -> m (MutableArray (PrimState m) a)
+newArr :: Int -> ST s (MutableArray s a)
 newArr len = newArray len $ error
   "Sp.Env: Attempting to read an element of the underlying array of a 'Rec'. Please report this as a bug."
 
@@ -70,14 +71,15 @@ empty = Rec 0 0 $ emptyArray
 -- | Prepend one entry to the record. \( O(n) \).
 cons :: f e -> Rec f es -> Rec f (e ': es)
 cons x (Rec off len arr) = Rec 0 (len + 1) $ runArray do
-  marr <- newArray (len + 1) (toAny x)
+  marr <- newArray (len + 1) (Any x)
   copyArray marr 1 arr off len
   pure marr
 
--- | Prepend one null entry to the record. \( O(n) \).
+-- | Prepend one null entry to the record. This entry can be normally evaluated (different from 'undefined'), but any
+-- attempt to use it will cause a runtime error. \( O(n) \).
 consNull :: Rec f es -> Rec f (e ': es)
 consNull (Rec off len arr) = Rec 0 (len + 1) $ runArray do
-  marr <- newArray (len + 1) (toAny ())
+  marr <- newArray (len + 1) (Any ())
   copyArray marr 1 arr off len
   pure marr
 
@@ -171,31 +173,14 @@ instance (Subset es es', e :> es') => Subset (e ': es) es' where
 pick :: ∀ es es' f. Subset es es' => Rec f es' -> Rec f es
 pick (Rec off _ arr) = Rec 0 (reifyLen @_ @es) $ runArray do
   marr <- newArr (reifyLen @_ @es)
-  go marr 0 (reifyIndices @_ @es @es')
+  for_ (zip [0..] $ reifyIndices @_ @es @es') \(newIx, oldIx) -> do
+    el <- indexArrayM arr (off + oldIx)
+    writeArray marr newIx el
   pure marr
-  where
-    go :: PrimMonad m => MutableArray (PrimState m) Any -> Int -> [Int] -> m ()
-    go _ _ [] = pure ()
-    go marr newIx (ix : ixs) = do
-      writeArray marr newIx (indexArray arr (off + ix))
-      go marr (newIx + 1) ixs
 
 -- | Update an entry in the record. \( O(n) \).
 update :: ∀ e es f. e :> es => f e -> Rec f es -> Rec f es
 update x (Rec off len arr) = Rec 0 len $ runArray do
   marr <- thawArray arr off len
-  writeArray marr (reifyIndex @_ @e @es) (toAny x)
+  writeArray marr (reifyIndex @_ @e @es) (Any x)
   pure marr
-
--- Helpers
-
--- | Coerce any boxed value into 'Any'.
-toAny :: a -> Any
-toAny = unsafeCoerce
-{-# INLINE toAny #-}
-
--- | Coerce 'Any' to a boxed value. This is /generally unsafe/ and it is your responsibility to ensure that the type
--- you're coercing into is the original type that the 'Any' is coerced from.
-fromAny :: Any -> a
-fromAny = unsafeCoerce
-{-# INLINE fromAny #-}

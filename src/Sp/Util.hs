@@ -47,7 +47,7 @@ local :: Reader r :> es => (r -> r) -> Eff es a -> Eff es a
 local f m = send (Local f m)
 
 handleReader :: r -> Handler (Reader r) es a
-handleReader !r _ = \case
+handleReader !r = \case
   Ask       -> pure r
   Local f m -> interpose (handleReader (f r)) m
 
@@ -69,7 +69,7 @@ state :: State s :> es => (s -> (a, s)) -> Eff es a
 state f = send (State f)
 
 handleState :: IORef s -> Handler (State s) es a
-handleState r _ = \case
+handleState r = \case
   Get     -> unsafeIO (readIORef r)
   Put s   -> unsafeIO (writeIORef r s)
   State f -> unsafeIO (atomicModifyIORefCAS r (swap . f))
@@ -94,8 +94,8 @@ try :: Error e :> es => Eff es a -> Eff es (Either e a)
 try m = catch (Right <$> m) (pure . Left)
 
 handleError :: forall e es a. Handler (Error e) es (Either e a)
-handleError ctx = \case
-  Throw e   -> abort ctx (pure $ Left e)
+handleError = \case
+  Throw e   -> abort (pure $ Left e)
   Catch m f -> either f pure =<< interpose (handleError @e) (Right <$> m)
 
 runError :: forall e es a. Eff (Error e : es) a -> Eff es (Either e a)
@@ -112,7 +112,7 @@ listen :: Writer w :> es => Eff es a -> Eff es (a, w)
 listen m = send (Listen m)
 
 handleWriter :: forall w es a. Monoid w => [IORef w] -> Handler (Writer w) es a
-handleWriter rs _ = \case
+handleWriter rs = \case
   Tell x   -> for_ rs \r -> unsafeIO (atomicModifyIORefCAS_ r (<> x))
   Listen m -> unsafeState mempty \r' -> do
     x <- interpose (handleWriter (r' : rs)) m
@@ -135,9 +135,9 @@ choice :: NonDet :> es => [a] -> Eff es a
 choice etc = send (Choice etc)
 
 handleNonDet :: Alternative f => Handler NonDet es (f a)
-handleNonDet ctx = \case
-  Empty -> abort ctx $ pure empty
-  Choice etc -> control ctx \cont ->
+handleNonDet = \case
+  Empty -> abort $ pure empty
+  Choice etc -> control \cont ->
     let collect [] acc = pure acc
         collect (e : etc') acc = do
           xs <- cont (pure e)

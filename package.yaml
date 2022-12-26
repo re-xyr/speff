@@ -39,6 +39,9 @@ default-extensions:
 - EmptyCase
 - TupleSections
 - BangPatterns
+- PatternSynonyms
+- ViewPatterns
+- FunctionalDependencies
 
 ghc-options:
 - -Wall
@@ -56,6 +59,10 @@ ghc-options:
 
 library:
   source-dirs: src
+  ghc-options:
+  - -fdicts-strict
+  - -flate-dmd-anal
+  - -fspec-constr
 
 benchmarks:
   speff-bench:

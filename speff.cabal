@@ -28,6 +28,7 @@ library
       Sp.Internal.Ctl
       Sp.Internal.Env
       Sp.Internal.Monad
+      Sp.Internal.Util
       Sp.Util
   other-modules:
       Paths_speff
@@ -56,7 +57,10 @@ library
       EmptyCase
       TupleSections
       BangPatterns
-  ghc-options: -Wall -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors -Wpartial-fields -Wunused-type-patterns -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+      PatternSynonyms
+      ViewPatterns
+      FunctionalDependencies
+  ghc-options: -Wall -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors -Wpartial-fields -Wunused-type-patterns -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques -fdicts-strict -flate-dmd-anal -fspec-constr
   build-depends:
       atomic-primops
     , base
@@ -97,6 +101,9 @@ benchmark speff-bench
       EmptyCase
       TupleSections
       BangPatterns
+      PatternSynonyms
+      ViewPatterns
+      FunctionalDependencies
   ghc-options: -Wall -Widentities -Wincomplete-record-updates -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors -Wpartial-fields -Wunused-type-patterns -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques -rtsopts -with-rtsopts=-T
   build-depends:
       atomic-primops
