@@ -46,7 +46,7 @@ newtype Eff (es :: [Effect]) (a :: Type) = Eff { unEff :: Env es -> Ctl a }
 
 type role InternalHandler nominal
 newtype InternalHandler e = InternalHandler
-  { runHandler :: forall es a. e :> es => e (Eff es) a -> Eff es a }
+  { runHandler :: ∀ es a. e :> es => e (Eff es) a -> Eff es a }
 
 instance Functor (Eff es) where
   fmap = liftM
@@ -71,16 +71,16 @@ class Handling (esSend :: [Effect]) (es :: [Effect]) (r :: Type) | esSend -> es 
 data HandlingDict es r = Handling (Env es) !(Marker r)
 type instance DictRep (Handling _ es r) = HandlingDict es r
 
-handlingEs :: forall esSend es r. Handling esSend es r => Env es
+handlingEs :: ∀ esSend es r. Handling esSend es r => Env es
 handlingEs = case handlingDict @esSend of
   Handling es _ -> es
 
-handlingMarker :: forall esSend es r. Handling esSend es r => Marker r
+handlingMarker :: ∀ esSend es r. Handling esSend es r => Marker r
 handlingMarker = case handlingDict @esSend of
   Handling _ mark -> mark
 
 -- | The type of effect handlers.
-type Handler e es r = forall esSend a. Handling esSend es r => e :> esSend => e (Eff esSend) a -> Eff esSend a
+type Handler e es r = ∀ esSend a. Handling esSend es r => e :> esSend => e (Eff esSend) a -> Eff esSend a
 
 -- This "unsafe" IO function is perfectly safe in the sense that it won't panic or otherwise cause undefined
 -- behaviors; it is only unsafe when it is used to embed arbitrary IO actions in any effect environment,
@@ -93,7 +93,7 @@ unsafeState :: s -> (IORef s -> Eff es a) -> Eff es a
 unsafeState x0 f = Eff \es -> promptState x0 \ref -> unEff (f ref) es
 {-# INLINE unsafeState #-}
 
-toInternalHandler :: forall e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
+toInternalHandler :: ∀ e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
 toInternalHandler mark es hdl = InternalHandler \(e :: e (Eff esSend) a) -> reflectDict @(Handling esSend es r) hdl (Handling es mark) e
 
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
@@ -139,30 +139,30 @@ send e = Eff \es -> unEff (runHandler (Rec.index es) e) es
 data Localized (tag :: k) :: Effect
 
 -- | Perform an operation from the handle-site.
-embed :: forall esSend es r a. Handling esSend es r => Eff es a -> Eff esSend a
+embed :: ∀ esSend es r a. Handling esSend es r => Eff es a -> Eff esSend a
 embed (Eff m) = Eff \_ -> m $ handlingEs @esSend
 {-# INLINE embed #-}
 
 -- | Perform an operation from the handle-site, while being able to convert an operation from the perform-site to the
 -- handle-site.
 withUnembed
-  :: forall esSend es r a
+  :: ∀ esSend es r a
   .  Handling esSend es r
-  => (forall tag. (Eff esSend a -> Eff (Localized tag : es) a) -> Eff (Localized tag : es) a)
+  => (∀ tag. (Eff esSend a -> Eff (Localized tag : es) a) -> Eff (Localized tag : es) a)
   -> Eff esSend a
 withUnembed f = Eff \esSend -> unEff (f \(Eff m) -> Eff \_ -> m esSend) $! Rec.consNull $ handlingEs @esSend
 {-# INLINE withUnembed #-}
 
 -- | Abort with a result value.
-abort :: forall esSend es r a. Handling esSend es r => Eff es r -> Eff esSend a
+abort :: ∀ esSend es r a. Handling esSend es r => Eff es r -> Eff esSend a
 abort (Eff m) = Eff \_ -> raise (handlingMarker @esSend) $ m $ handlingEs @esSend
 {-# INLINE abort #-}
 
 -- | Yield and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
 control
-  :: forall esSend es r a
+  :: ∀ esSend es r a
   .  Handling esSend es r
-  => (forall tag. (Eff esSend a -> Eff (Localized tag : es) r) -> Eff (Localized tag : es) r)
+  => (∀ tag. (Eff esSend a -> Eff (Localized tag : es) r) -> Eff (Localized tag : es) r)
   -> Eff esSend a
 control f = Eff \esSend -> yield (handlingMarker @esSend) \cont ->
   unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.consNull $ handlingEs @esSend

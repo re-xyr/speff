@@ -13,7 +13,7 @@ uniqueSource :: AtomicCounter
 uniqueSource = unsafePerformIO (newCounter 0)
 {-# NOINLINE uniqueSource #-}
 
-freshMarker :: forall a. Ctl (Marker a)
+freshMarker :: ∀ a. Ctl (Marker a)
 freshMarker = liftIO $ Marker <$> incrCounter 1 uniqueSource
 
 type role Marker representational
@@ -28,8 +28,8 @@ instance TestEquality Marker where
 type role Result representational
 data Result (a :: Type)
   = Pure a
-  | forall (r :: Type). Raise !(Marker r) (Ctl r)
-  | forall (r :: Type) (b :: Type). Yield !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
+  | ∀ (r :: Type). Raise !(Marker r) (Ctl r)
+  | ∀ (r :: Type) (b :: Type). Yield !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
 
 type role Ctl representational
 newtype Ctl (a :: Type) = Ctl { unCtl :: IO (Result a) }
@@ -53,7 +53,7 @@ g `compose` f = \x -> Ctl $ unCtl (f x) >>= \case
   Raise mark r        -> pure (Raise mark r)
   Yield mark ctl cont -> pure $ Yield mark ctl (g `compose` cont)
 
-prompt :: forall a. (Marker a -> Ctl a) -> Ctl a
+prompt :: ∀ a. (Marker a -> Ctl a) -> Ctl a
 prompt f = do
   mark <- freshMarker @a
   promptWith mark (f mark)
@@ -76,7 +76,7 @@ yield !mark f = Ctl $ pure $ Yield mark f id
 raise :: Marker r -> Ctl r -> Ctl a
 raise !mark r = Ctl $ pure $ Raise mark r
 
-promptState :: forall s r. s -> (IORef s -> Ctl r) -> Ctl r
+promptState :: ∀ s r. s -> (IORef s -> Ctl r) -> Ctl r
 promptState x0 f = do
   ref <- liftIO (newIORef x0)
   promptStateWith ref (f ref)

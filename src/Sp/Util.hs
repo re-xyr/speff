@@ -93,12 +93,12 @@ catch m h = send (Catch m h)
 try :: Error e :> es => Eff es a -> Eff es (Either e a)
 try m = catch (Right <$> m) (pure . Left)
 
-handleError :: forall e es a. Handler (Error e) es (Either e a)
+handleError :: ∀ e es a. Handler (Error e) es (Either e a)
 handleError = \case
   Throw e   -> abort (pure $ Left e)
   Catch m f -> either f pure =<< interpose (handleError @e) (Right <$> m)
 
-runError :: forall e es a. Eff (Error e : es) a -> Eff es (Either e a)
+runError :: ∀ e es a. Eff (Error e : es) a -> Eff es (Either e a)
 runError = interpret (handleError @e) . fmap Right
 
 data Writer (w :: Type) :: Effect where
@@ -111,7 +111,7 @@ tell x = send (Tell x)
 listen :: Writer w :> es => Eff es a -> Eff es (a, w)
 listen m = send (Listen m)
 
-handleWriter :: forall w es a. Monoid w => [IORef w] -> Handler (Writer w) es a
+handleWriter :: ∀ w es a. Monoid w => [IORef w] -> Handler (Writer w) es a
 handleWriter rs = \case
   Tell x   -> for_ rs \r -> unsafeIO (atomicModifyIORefCAS_ r (<> x))
   Listen m -> unsafeState mempty \r' -> do
