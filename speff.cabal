@@ -24,6 +24,10 @@ source-repository head
 
 library
   exposed-modules:
+      Ef.Internal.Env
+      Ef.Internal.Monad
+      Ef.Internal.Util
+      Ef.Util
       Sp.Eff
       Sp.Internal.Ctl
       Sp.Internal.Env
