@@ -1,13 +1,14 @@
+{-# OPTIONS_GHC -Wno-orphans #-}
 module Ef.Util where
 
-import           Control.Applicative (Applicative (liftA2))
-import           Data.Atomics        (atomicModifyIORefCAS)
-import           Data.IORef          (IORef, newIORef, readIORef, writeIORef)
+import           Control.Applicative (Alternative (empty, (<|>)))
+import           Data.Atomics        (atomicModifyIORefCAS, atomicModifyIORefCAS_)
+import           Data.Foldable       (for_)
+import           Data.IORef          (IORef, readIORef, writeIORef)
 import           Data.Kind           (Type)
 import           Data.Tuple          (swap)
 import           Ef.Internal.Env     ((:>))
-import qualified Ef.Internal.Env     as Rec
-import           Ef.Internal.Monad
+import           Ef.Internal.Monad   hiding (catch)
 
 data Reader (r :: Type) :: Effect where
   Ask :: Reader r m r
@@ -21,14 +22,14 @@ ask = send Ask
 local :: Reader r :> es => (r -> r) -> Eff es a -> Eff es a
 local f m = send (Local f m)
 
-handleReader :: r -> Handler (Reader r) es a
+handleReader :: r -> Handler (Reader r) es es' a a
 handleReader !r = \case
   Ask       -> pure r
-  Local f m -> interpose (handleReader (f r)) m
+  Local f m -> interpose pure (handleReader (f r)) m
 
 -- | Run the 'Reader' effect with an environment value.
 runReader :: r -> Eff (Reader r : es) a -> Eff es a
-runReader r = interpret (handleReader r)
+runReader r = interpret pure (handleReader r)
 
 -- | Provides a mutable state of type @s@.
 data State s :: Effect where
@@ -49,25 +50,17 @@ put x = send (Put x)
 state :: State s :> es => (s -> (a, s)) -> Eff es a
 state f = send (State f)
 
-handleState :: IORef s -> Handler (State s) es a
+handleState :: IORef s -> Handler (State s) es es' a a
 handleState r = \case
   Get     -> unsafeIO (readIORef r)
   Put s   -> unsafeIO (writeIORef r s)
   State f -> unsafeIO (atomicModifyIORefCAS r (swap . f))
 
-evalState :: s -> Eff (State s : es) a -> Eff es a
-evalState s0 (Eff m) = do
-  ref <- unsafeIO (newIORef s0)
-  prompt \mark -> Eff \es ->
-    Ctl $ unCtl (m $! Rec.cons (toInternalHandler mark es (handleState ref)) es) >>= \case
-      Pure a                 -> pure $ Pure a
-      Abort mark' r          -> pure $ Abort mark' r
-      Capture mark' ctl cont -> do
-        s1 <- readIORef ref
-        pure $ Capture mark' ctl (evalState s1 . cont)
-
 runState :: s -> Eff (State s : es) a -> Eff es (a, s)
-runState s0 m = evalState s0 (liftA2 (,) m get)
+runState s m = unsafeState s \r -> do
+  x <- interpret pure (handleState r) m
+  s' <- unsafeIO (readIORef r)
+  pure (x, s')
 
 -- | Allows you to throw error values of type @e@ and catching these errors too.
 data Error (e :: Type) :: Effect where
@@ -86,14 +79,14 @@ catch m h = send (Catch m h)
 try :: Error e :> es => Eff es a -> Eff es (Either e a)
 try m = catch (Right <$> m) (pure . Left)
 
-handleError :: ∀ e es a. Handler (Error e) es (Either e a)
+handleError :: ∀ e es es' a. Handler (Error e) es es' a (Either e a)
 handleError = \case
   Throw e   -> abort (pure $ Left e)
-  Catch m f -> either f pure =<< interpose (handleError @e) (Right <$> m)
+  Catch m f -> either f pure =<< interpose (pure . Right) (handleError @e) m
 
 -- | Run the 'Error' effect. If there is any unhandled error, it is returned as a 'Left'.
 runError :: ∀ e es a. Eff (Error e : es) a -> Eff es (Either e a)
-runError = interpret (handleError @e) . fmap Right
+runError = interpret (pure . Right) (handleError @e)
 
 -- | Provides an append-only state, and also allows you to record what is appended in a specific scope.
 data Writer (w :: Type) :: Effect where
@@ -108,16 +101,50 @@ tell x = send (Tell x)
 listen :: Writer w :> es => Eff es a -> Eff es (a, w)
 listen m = send (Listen m)
 
-handleWriter :: ∀ w es a. (State w :> es, Monoid w) => Handler (Writer w) es a
-handleWriter = \case
-  Tell x   -> state (\xs -> ((), xs <> x))
-  Listen m -> interpose
+handleWriter :: ∀ w es es' a a'. Monoid w => [IORef w] -> Handler (Writer w) es es' a a'
+handleWriter rs = \case
+  Tell x   -> for_ rs \r -> unsafeIO (atomicModifyIORefCAS_ r (<> x))
+  Listen m -> unsafeState mempty \r' -> do
+    x <- interpose pure (handleWriter (r' : rs)) m
+    w' <- unsafeIO (readIORef r')
+    pure (x, w')
 {-# INLINABLE handleWriter #-}
 
 -- | Run the 'Writer' state, with the append-only state as a monoidal value.
 runWriter :: Monoid w => Eff (Writer w : es) a -> Eff es (a, w)
 runWriter m = unsafeState mempty \r -> do
-  x <- interpret (handleWriter [r]) m
+  x <- interpret pure (handleWriter [r]) m
   w' <- unsafeIO (readIORef r)
   pure (x, w')
 {-# INLINABLE runWriter #-}
+
+-- | Provides nondeterministic choice.
+data NonDet :: Effect where
+  Empty :: NonDet m a
+  Choice :: [a] -> NonDet m a
+
+-- | Nondeterministic choice.
+choice :: NonDet :> es => [a] -> Eff es a
+choice etc = send (Choice etc)
+
+handleNonDet :: Alternative f => Handler NonDet es es' a (f a)
+handleNonDet = \case
+  Empty -> abort $ pure empty
+  Choice etc -> shift0 \cont ->
+    let collect [] acc = pure acc
+        collect (e : etc') acc = do
+          xs <- cont (pure e)
+          collect etc' $! (acc <|> xs)
+    in collect etc empty
+{-# INLINABLE handleNonDet #-}
+
+-- | Run the 'NonDet' effect, with the nondeterministic choice provided by an 'Alternative' instance.
+runNonDet :: Alternative f => Eff (NonDet : es) a -> Eff es (f a)
+runNonDet = interpret (pure . pure) handleNonDet
+{-# INLINABLE runNonDet #-}
+
+instance NonDet :> es => Alternative (Eff es) where
+  empty = send Empty
+  m <|> n = do
+    x <- send (Choice [True, False])
+    if x then m else n
