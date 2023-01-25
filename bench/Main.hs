@@ -7,7 +7,7 @@ import           Test.Tasty.Bench
 
 main :: IO ()
 main = defaultMain
-  [ bgroup "countdown" $ [1000000] <&> \x -> bgroup (show x)
+  [ bgroup "countdown" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp.shallow" $ nf countdownSp x
     , bench "sp.deep" $ nf countdownSpDeep x
     , bench "ev.shallow" $ nf countdownEv x
@@ -21,7 +21,7 @@ main = defaultMain
     , bench "sem.shallow" $ nf countdownSem x
     , bench "sem.deep" $ nf countdownSemDeep x
     ]
-  , bgroup "pyth" $ [128] <&> \x -> bgroup (show x)
+  , bgroup "pyth" $ [32] <&> \x -> bgroup (show x)
     [ bench "sp.shallow" $ nf pythSp x
     , bench "sp.deep" $ nf pythSpDeep x
     , bench "ev.shallow" $ nf pythEv x
@@ -33,7 +33,7 @@ main = defaultMain
     , bench "sem.shallow" $ nf pythSem x
     , bench "sem.deep" $ nf pythSemDeep x
     ]
-  , bgroup "catch" $ [1000000] <&> \x -> bgroup (show x)
+  , bgroup "catch" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp.shallow" $ nf catchSp x
     , bench "sp.deep" $ nf catchSpDeep x
     , bench "fused.shallow" $ nf catchFused x
@@ -41,7 +41,7 @@ main = defaultMain
     , bench "sem.shallow" $ nf catchSem x
     , bench "sem.deep" $ nf catchSemDeep x
     ]
-  , bgroup "local" $ [1000000] <&> \x -> bgroup (show x)
+  , bgroup "local" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp.shallow" $ nf localSp x
     , bench "sp.deep" $ nf localSpDeep x
     , bench "fused.shallow" $ nf localFused x
