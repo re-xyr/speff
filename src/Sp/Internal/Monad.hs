@@ -24,6 +24,7 @@ module Sp.Internal.Monad
   ) where
 
 import           Control.Monad          (ap, liftM)
+import           Control.Monad.Catch    (MonadCatch (catch), MonadThrow (throwM))
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.IORef             (IORef)
 import           Data.Kind              (Type)
@@ -31,7 +32,7 @@ import           Sp.Internal.Ctl
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
 import           Sp.Internal.Util       (DictRep, reflectDict)
-import           System.IO.Unsafe       (unsafeDupablePerformIO)
+import           System.IO.Unsafe       (unsafePerformIO)
 
 -- | The kind of higher-order effects.
 type Effect = (Type -> Type) -> Type -> Type
@@ -170,7 +171,7 @@ control f = Eff \esSend -> yield (handlingMarker @esSend) \cont ->
 
 -- | Unpack the 'Eff' monad.
 runEff :: Eff '[] a -> a
-runEff (Eff m) = unsafeDupablePerformIO (runCtl $ m Rec.empty)
+runEff (Eff m) = unsafePerformIO (runCtl $ m Rec.empty)
 {-# INLINE runEff #-}
 
 -- | Ability to embed 'IO' side effects.
@@ -179,6 +180,14 @@ data IOE :: Effect
 instance IOE :> es => MonadIO (Eff es) where
   liftIO = unsafeIO
   {-# INLINE liftIO #-}
+
+instance IOE :> es => MonadThrow (Eff es) where
+  throwM x = Eff \_ -> throwM x
+  {-# INLINE throwM #-}
+
+instance IOE :> es => MonadCatch (Eff es) where
+  catch (Eff m) h = Eff \es -> catch (m es) \ex -> unEff (h ex) es
+  {-# INLINE catch #-}
 
 -- | Unpack an 'Eff' monad with 'IO' acitons.
 runIOE :: Eff '[IOE] a -> IO a

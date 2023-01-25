@@ -15,6 +15,7 @@ dependencies:
 - base
 - primitive
 - atomic-primops
+- exceptions
 
 default-extensions:
 - BlockArguments
@@ -42,6 +43,7 @@ default-extensions:
 - PatternSynonyms
 - ViewPatterns
 - FunctionalDependencies
+- MagicHash
 
 ghc-options:
 - -Wall
