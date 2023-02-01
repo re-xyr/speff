@@ -1,0 +1,8 @@
+packages:       speff.cabal
+jobs:           $ncpus
+benchmarks:     True
+
+if impl(ghc >= 9.4)
+  allow-newer: freer-simple:template-haskell
+if impl(ghc >= 9.6)
+  allow-newer: base

@@ -1,8 +1,6 @@
 cradle:
-  stack:
-    - path: "./src"
-      component: "speff:lib"
-
-    - path: "./bench"
+  cabal:
+    - path: "src"
+      component: "lib:speff"
+    - path: "bench"
       component: "speff:bench:speff-bench"
-
