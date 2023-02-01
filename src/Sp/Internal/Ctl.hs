@@ -11,13 +11,15 @@ module Sp.Internal.Ctl
   , mask_
   , uninterruptibleMask
   , uninterruptibleMask_
+  , interruptible
   ) where
 
 import           Control.Exception      (MaskingState (MaskedInterruptible, MaskedUninterruptible, Unmasked),
                                          SomeException, getMaskingState)
 import qualified Control.Exception      as Exception
 import           Control.Monad          (ap, liftM, (<=<))
-import           Control.Monad.Catch    (MonadCatch (catch), MonadThrow (throwM))
+import           Control.Monad.Catch    (MonadCatch, MonadThrow)
+import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.Atomics.Counter   (AtomicCounter, incrCounter, newCounter)
 import           Data.IORef             (IORef, newIORef, readIORef, writeIORef)
@@ -50,6 +52,12 @@ data Result (a :: Type)
   | ∀ (r :: Type). Raise !(Marker r) (Ctl r)
   | ∀ (r :: Type) (b :: Type). Yield !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
 
+extend :: (Ctl a -> Ctl a) -> Result a -> Result a
+extend f = \case
+  Pure a              -> Pure a
+  Raise mark r        -> Raise mark r
+  Yield mark ctl cont -> Yield mark ctl (f . cont)
+
 type role Ctl representational
 newtype Ctl (a :: Type) = Ctl { unCtl :: IO (Result a) }
 
@@ -69,6 +77,9 @@ instance Monad Ctl where
 compose :: (b -> Ctl c) -> (a -> Ctl b) -> a -> Ctl c
 compose = (<=<)
 {-# NOINLINE compose #-}
+
+liftMap :: (IO (Result a) -> IO (Result a)) -> Ctl a -> Ctl a
+liftMap f (Ctl m) = Ctl $ extend (liftMap f) <$> f m
 
 prompt :: ∀ a. (Marker a -> Ctl a) -> Ctl a
 prompt f = do
@@ -121,10 +132,7 @@ instance MonadThrow Ctl where
   throwM = Ctl . Exception.throwIO
 
 instance MonadCatch Ctl where
-  catch (Ctl m) h = Ctl $ Exception.handle (unCtl . h) m >>= \case
-    Pure a              -> pure $ Pure a
-    Raise mark r        -> pure $ Raise mark r
-    Yield mark ctl cont -> pure $ Yield mark ctl ((`catch` h) . cont)
+  catch m h = liftMap (Exception.handle (unCtl . h)) m
 
 dynamicWind :: Ctl () -> Ctl () -> Ctl a -> Ctl a
 dynamicWind before after (Ctl action) = do
@@ -133,47 +141,29 @@ dynamicWind before after (Ctl action) = do
     pure $ Pure res
   after >> Ctl case res of
     Left se -> Exception.throwIO se
-    Right y -> case y of
-      Pure a              -> pure $ Pure a
-      Raise mark r        -> pure $ Raise mark r
-      Yield mark ctl cont -> pure $ Yield mark ctl (dynamicWind before after . cont)
+    Right y -> pure $ extend (dynamicWind before after) y
 
-block :: Ctl a -> Ctl a
-block (Ctl (IO m)) = Ctl $ IO (maskAsyncExceptions# m) >>= \case
-  Pure a              -> pure $ Pure a
-  Raise mark r        -> pure $ Raise mark r
-  Yield mark ctl cont -> pure $ Yield mark ctl (block . cont)
+block, unblock, blockUninterruptible :: Ctl a -> Ctl a
+block = liftMap \(IO m) -> IO $ maskAsyncExceptions# m
+unblock = liftMap \(IO m) -> IO $ unmaskAsyncExceptions# m
+blockUninterruptible = liftMap \(IO m) -> IO $ maskUninterruptible# m
 
-unblock :: Ctl a -> Ctl a
-unblock (Ctl (IO m)) = Ctl $ IO (unmaskAsyncExceptions# m) >>= \case
-  Pure a              -> pure $ Pure a
-  Raise mark r        -> pure $ Raise mark r
-  Yield mark ctl cont -> pure $ Yield mark ctl (block . cont)
+mask, uninterruptibleMask :: ((forall x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
+mask io = liftIO getMaskingState >>= \case
+  Unmasked              -> block $ io unblock
+  MaskedInterruptible   -> io block
+  MaskedUninterruptible -> io blockUninterruptible
+uninterruptibleMask io = liftIO getMaskingState >>= \case
+  Unmasked              -> blockUninterruptible $ io unblock
+  MaskedInterruptible   -> blockUninterruptible $ io block
+  MaskedUninterruptible -> io blockUninterruptible
 
-blockUninterruptible :: Ctl a -> Ctl a
-blockUninterruptible (Ctl (IO m)) = Ctl $ IO (maskUninterruptible# m) >>= \case
-  Pure a              -> pure $ Pure a
-  Raise mark r        -> pure $ Raise mark r
-  Yield mark ctl cont -> pure $ Yield mark ctl (block . cont)
-
-mask :: ((forall x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
-mask io = do
-  b <- liftIO getMaskingState
-  case b of
-    Unmasked              -> block $ io unblock
-    MaskedInterruptible   -> io block
-    MaskedUninterruptible -> io blockUninterruptible
-
-mask_ :: Ctl a -> Ctl a
+mask_, uninterruptibleMask_ :: Ctl a -> Ctl a
 mask_ io = mask (\_ -> io)
-
-uninterruptibleMask :: ((forall x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
-uninterruptibleMask io = do
-  b <- liftIO getMaskingState
-  case b of
-    Unmasked              -> blockUninterruptible $ io unblock
-    MaskedInterruptible   -> blockUninterruptible $ io block
-    MaskedUninterruptible -> io blockUninterruptible
-
-uninterruptibleMask_ :: Ctl a -> Ctl a
 uninterruptibleMask_ io = uninterruptibleMask (\_ -> io)
+
+interruptible :: Ctl a -> Ctl a
+interruptible io = liftIO getMaskingState >>= \case
+  Unmasked              -> io
+  MaskedInterruptible   -> unblock io
+  MaskedUninterruptible -> io

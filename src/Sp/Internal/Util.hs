@@ -1,16 +1,19 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 module Sp.Internal.Util (Any, pattern Any, fromAny, DictRep, reflectDict) where
 
-import           Data.Kind
+import           Data.Kind     (Constraint, Type)
 import           GHC.Exts      (Any)
 import           Unsafe.Coerce (unsafeCoerce)
 
 -- | Coerce any boxed value into and from 'Any'. This is generally unsafe and it is your responsibility to ensure
 -- that the type you're coercing into is the original type that the 'Any' value is coerced from.
 pattern Any :: ∀ a. a -> Any
-pattern Any {fromAny} <- (unsafeCoerce -> fromAny)
+pattern Any x <- (unsafeCoerce -> x)
   where Any x = unsafeCoerce x
 {-# COMPLETE Any #-}
+
+fromAny :: Any -> a
+fromAny (Any x) = x
 
 newtype DictMagic c a = DictMagic (c => a)
 

@@ -24,7 +24,8 @@ module Sp.Internal.Monad
   ) where
 
 import           Control.Monad          (ap, liftM)
-import           Control.Monad.Catch    (MonadCatch (catch), MonadThrow (throwM))
+import           Control.Monad.Catch    (MonadCatch, MonadThrow)
+import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.IORef             (IORef)
 import           Data.Kind              (Type)
@@ -95,7 +96,8 @@ unsafeState x0 f = Eff \es -> promptState x0 \ref -> unEff (f ref) es
 {-# INLINE unsafeState #-}
 
 toInternalHandler :: ∀ e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
-toInternalHandler mark es hdl = InternalHandler \(e :: e (Eff esSend) a) -> reflectDict @(Handling esSend es r) hdl (Handling es mark) e
+toInternalHandler mark es hdl = InternalHandler \(e :: e (Eff esSend) a) ->
+  reflectDict @(Handling esSend es r) hdl (Handling es mark) e
 
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
 alter f (Eff m) = Eff \es -> m $! f es
@@ -182,11 +184,11 @@ instance IOE :> es => MonadIO (Eff es) where
   {-# INLINE liftIO #-}
 
 instance IOE :> es => MonadThrow (Eff es) where
-  throwM x = Eff \_ -> throwM x
+  throwM x = Eff \_ -> Catch.throwM x
   {-# INLINE throwM #-}
 
 instance IOE :> es => MonadCatch (Eff es) where
-  catch (Eff m) h = Eff \es -> catch (m es) \ex -> unEff (h ex) es
+  catch (Eff m) h = Eff \es -> Catch.catch (m es) \ex -> unEff (h ex) es
   {-# INLINE catch #-}
 
 -- | Unpack an 'Eff' monad with 'IO' acitons.
