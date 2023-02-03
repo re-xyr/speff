@@ -61,6 +61,7 @@ common lang
     ViewPatterns
     FunctionalDependencies
     MagicHash
+    NoStarIsType
 
 common dump
   ghc-options:
@@ -81,6 +82,7 @@ library
   exposed-modules:
     Sp.Internal.Ctl
     Sp.Internal.Env
+    Sp.Internal.Handle
     Sp.Internal.Monad
     Sp.Internal.Util
     Sp.Eff

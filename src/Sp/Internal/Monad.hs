@@ -6,11 +6,8 @@ module Sp.Internal.Monad
   , Handler
   , unsafeIO
   , unsafeState
-  , lift
-  , interpret
-  , reinterpret
-  , interpose
-  , reinterpose
+  , handle
+  , alter
   , send
   , Localized
   , embed
@@ -18,7 +15,6 @@ module Sp.Internal.Monad
   , abort
   , control
   , runEff
-  , (:>)
   , IOE
   , runIOE
   ) where
@@ -100,37 +96,10 @@ toInternalHandler mark es hdl = InternalHandler \(e :: e (Eff esSend) a) ->
   reflectDict @(Handling esSend es r) hdl (Handling es mark) e
 
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
-alter f (Eff m) = Eff \es -> m $! f es
+alter f = \(Eff m) -> Eff \es -> m $! f es
 
-handle :: Handler e es' a -> (InternalHandler e -> Env es' -> Env es) -> Eff es a -> Eff es' a
-handle hdl f (Eff m) = Eff \es -> prompt \mark -> m $! f (toInternalHandler mark es hdl) es
-
--- | Handle an effect.
-interpret :: Handler e es a -> Eff (e : es) a -> Eff es a
-interpret hdl = handle hdl Rec.cons
-{-# INLINE interpret #-}
-
--- | Handle an effect with another newly introduced effect. This allows for effect encapsulation because it does not
--- require placing constraints on the original row.
-reinterpret :: Handler e (e' : es) a -> Eff (e : es) a -> Eff (e' : es) a
-reinterpret hdl = handle hdl \ih es -> Rec.cons ih $ Rec.tail es
-{-# INLINE reinterpret #-}
-
--- | Handle an effect already in the environment. This is particularly useful in scoped effect operations.
-interpose :: e :> es => Handler e es a -> Eff es a -> Eff es a
-interpose hdl = handle hdl Rec.update
-{-# INLINE interpose #-}
-
--- | Handle an effect already in the environment with another newly introduced effect.
-reinterpose :: e :> es => Handler e (e' : es) a -> Eff es a -> Eff (e' : es) a
-reinterpose hdl = handle hdl \ih es -> Rec.update ih $ Rec.tail es
-{-# INLINE reinterpose #-}
-
--- | List a computation to a larger effect environment; it can also be thought as "masking" the outermost effect for
--- the computation.
-lift :: Eff es a -> Eff (e : es) a
-lift = alter Rec.tail
-{-# INLINE lift #-}
+handle :: (InternalHandler e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
+handle f = \hdl (Eff m) -> Eff \es -> prompt \mark -> m $! f (toInternalHandler mark es hdl) es
 
 -- | Perform an effect operation.
 send :: e :> es => e (Eff es) a -> Eff es a
@@ -193,5 +162,5 @@ instance IOE :> es => MonadCatch (Eff es) where
 
 -- | Unpack an 'Eff' monad with 'IO' acitons.
 runIOE :: Eff '[IOE] a -> IO a
-runIOE m = runCtl $ unEff (interpret (\case) m) Rec.empty
+runIOE m = runCtl $ unEff m (Rec.consNull Rec.empty)
 {-# INLINE runIOE #-}

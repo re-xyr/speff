@@ -1,4 +1,5 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE AllowAmbiguousTypes     #-}
+{-# LANGUAGE UndecidableSuperClasses #-}
 -- |
 -- Copyright: (c) 2021 Xy Ren
 -- License: BSD3
@@ -16,33 +17,36 @@
 module Sp.Internal.Env
   ( Rec
   , length
-  , empty
     -- * Construction
+  , empty
   , cons
   , consNull
   , type (++)
   , concat
     -- * Deconstruction
-  , tail
-  , KnownList
-  , drop
-    -- * Retrieval
   , head
+  , tail
+  , type KnownList
+  , drop
   , take
-  , (:>)
+    -- * Retrieval & Update
+  , type (:>)
   , index
-  , Subset
-  , pick
-    -- * Updating
   , update
+    -- * Subset operations
+  , type Suffix
+  , suffix
+  , type KnownSubset
+  , pick
+  , type Subset
+  , extract
   ) where
 
 import           Control.Monad.ST     (ST)
 import           Data.Foldable        (for_)
-import           Data.Kind            (Type)
+import           Data.Kind            (Constraint, Type)
 import           Data.Primitive.Array (Array, MutableArray, cloneArray, copyArray, emptyArray, indexArray, indexArrayM,
                                        newArray, runArray, thawArray, writeArray)
-
 import           GHC.TypeLits         (ErrorMessage (ShowType, Text, (:<>:)), TypeError)
 import           Prelude              hiding (concat, drop, head, length, tail, take)
 import           Sp.Internal.Util     (Any, fromAny, pattern Any)
@@ -58,6 +62,16 @@ data Rec (f :: k -> Type) (es :: [k]) = Rec
 -- | Get the length of the record.
 length :: Rec f es -> Int
 length (Rec _ len _) = len
+
+unreifiable :: String -> String -> a
+unreifiable clsName comp = error $
+  "Sp.Env: Attempting to access " <> comp <> " without a reflected value. This is perhaps because you are trying to \
+  \define an instance for the '" <> clsName <> "' typeclass, which you should not be doing whatsoever. If that or \
+  \other shenanigans seem unlikely, please report this as a bug."
+
+--------------------------------------------------------------------------------
+-- Construction ----------------------------------------------------------------
+--------------------------------------------------------------------------------
 
 -- | Create a new 'MutableArray' with no contents.
 newArr :: Int -> ST s (MutableArray s a)
@@ -97,21 +111,23 @@ concat (Rec off len arr) (Rec off' len' arr') = Rec 0 (len + len') $ runArray do
   copyArray marr len arr' off' len'
   pure marr
 
+--------------------------------------------------------------------------------
+-- Deconstruction --------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- | Get the head of the record. \( O(1) \).
+head :: Rec f (e ': es) -> f e
+head (Rec off _ arr) = fromAny $ indexArray arr off
+
 -- | Slice off one entry from the top of the record. \( O(1) \).
 tail :: Rec f (e ': es) -> Rec f es
 tail (Rec off len arr) = Rec (off + 1) (len - 1) arr
 
-unreifiable :: String -> String -> String -> a
-unreifiable clsName funName comp = error $
-  funName <> ": Attempting to access " <> comp <> " without a reflected value. This is perhaps because you are trying \
-  \to define an instance for the '" <> clsName <> "' typeclass, which you should not be doing whatsoever. If that or \
-  \other shenanigans seem unlikely, please report this as a bug."
-
--- | The list @es@ list is concrete, i.e. is of the form @'[a1, a2, ..., an]@, i.e. is not a type variable.
+-- | The list @es@ list is concrete, i.e. is of the form @'[a1, a2, ..., an]@ therefore having a known length.
 class KnownList (es :: [k]) where
   -- | Get the length of the list.
   reifyLen :: Int
-  reifyLen = unreifiable "KnownList" "Sp.Env" "the length of a type-level list"
+  reifyLen = unreifiable "KnownList" "the length of a type-level list"
 
 instance KnownList '[] where
   reifyLen = 0
@@ -119,25 +135,25 @@ instance KnownList '[] where
 instance KnownList es => KnownList (e ': es) where
   reifyLen = 1 + reifyLen @_ @es
 
--- | Slice off several entries from the top of the record. \( O(1) \).
+-- | Slice off several entries from the top of the record. Amortized \( O(1) \).
 drop :: ∀ es es' f. KnownList es => Rec f (es ++ es') -> Rec f es'
 drop (Rec off len arr) = Rec (off + len') (len - len') arr
   where len' = reifyLen @_ @es
-
--- | Get the head of the record. \( O(1) \).
-head :: Rec f (e ': es) -> f e
-head (Rec off _ arr) = fromAny $ indexArray arr off
 
 -- | Take elements from the top of the record. \( O(m) \).
 take :: ∀ es es' f. KnownList es => Rec f (es ++ es') -> Rec f es
 take (Rec off _ arr) = Rec 0 len $ cloneArray arr off (off + len)
   where len = reifyLen @_ @es
 
+--------------------------------------------------------------------------------
+-- Retrieval & Update ----------------------------------------------------------
+--------------------------------------------------------------------------------
+
 -- | The element @e@ is present in the list @es@.
 class (e :: k) :> (es :: [k]) where
   -- | Get the index of the element.
   reifyIndex :: Int
-  reifyIndex = unreifiable "Elem" "Sp.Env" "the index of an element of a type-level list"
+  reifyIndex = unreifiable "Elem" "an element of a type-level list"
 infix 0 :>
 
 instance {-# OVERLAPPING #-} e :> e : es where
@@ -149,34 +165,11 @@ instance e :> es => e :> e' : es where
 type ElemNotFound e = 'Text "The element '" ':<>: 'ShowType e ':<>: 'Text "' is not present in the constraint"
 
 instance TypeError (ElemNotFound e) => e :> '[] where
-  reifyIndex = error
-    "Sp.Env: Attempting to refer to a nonexistent member. Please report this as a bug."
+  reifyIndex = error "Sp.Env: Attempting to refer to a nonexistent member. Please report this as a bug."
 
 -- | Get an element in the record. Amortized \( O(1) \).
 index :: ∀ e es f. e :> es => Rec f es -> f e
 index (Rec off _ arr) = fromAny $ indexArray arr (off + reifyIndex @_ @e @es)
-
--- | @es@ is a subset of @es'@.
-class KnownList es => Subset (es :: [k]) (es' :: [k]) where
-  -- | Get a list of indices of the elements.
-  reifyIndices :: [Int]
-  reifyIndices = unreifiable
-    "Subset" "Sp.Env" "the index of multiple elements of a type-level list"
-
-instance Subset '[] es where
-  reifyIndices = []
-
-instance (Subset es es', e :> es') => Subset (e ': es) es' where
-  reifyIndices = reifyIndex @_ @e @es' : reifyIndices @_ @es @es'
-
--- | Get a subset of the record. Amortized \( O(m) \).
-pick :: ∀ es es' f. Subset es es' => Rec f es' -> Rec f es
-pick (Rec off _ arr) = Rec 0 (reifyLen @_ @es) $ runArray do
-  marr <- newArr (reifyLen @_ @es)
-  for_ (zip [0..] $ reifyIndices @_ @es @es') \(newIx, oldIx) -> do
-    el <- indexArrayM arr (off + oldIx)
-    writeArray marr newIx el
-  pure marr
 
 -- | Update an entry in the record. \( O(n) \).
 update :: ∀ e es f. e :> es => f e -> Rec f es -> Rec f es
@@ -184,3 +177,101 @@ update x (Rec off len arr) = Rec 0 len $ runArray do
   marr <- thawArray arr off len
   writeArray marr (reifyIndex @_ @e @es) (Any x)
   pure marr
+
+--------------------------------------------------------------------------------
+-- Subset Operations -----------------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- | @es@ is a suffix of @es'@. This works even if both has a shared polymorphic tail, e.g. this typeclass recognizes
+-- @2 : 3 : es@ is a suffix of @0 : 1 : 2 : 3 : es@.
+class Suffix (es :: [k]) (es' :: [k]) where
+  reifyPrefix :: Int
+  reifyPrefix = unreifiable "Subset" "a prefix of a type-level list"
+
+instance Suffix es es where
+  reifyPrefix = 0
+
+-- | This is morally coherent because if it actually turned out that @es ~ e : es'@, the search will simply fail
+-- instead of producing a different instance.
+instance {-# INCOHERENT #-} Suffix es es' => Suffix es (e : es') where
+  reifyPrefix = 1 + reifyPrefix @_ @es @es'
+
+-- | Get a suffix of the record. Amortized \( O(1) \).
+suffix :: ∀ es es' f. Suffix es es' => Rec f es' -> Rec f es
+suffix (Rec off len arr) = Rec (off + dropped) (len - dropped) arr
+  where dropped = reifyPrefix @_ @es @es'
+
+type family AllMembers (es :: [k]) (es' :: [k]) :: Constraint where
+  AllMembers '[] _ = ()
+  AllMembers (e : es) es' = (e :> es', AllMembers es es')
+
+-- | @es@ is a known subset of @es'@, i.e. all members of @es@ have a statically known index in @es'@.
+class (KnownList es, AllMembers es es') => KnownSubset (es :: [k]) (es' :: [k]) where
+  -- | Get a list of indices of the elements.
+  reifyIndices :: [Int]
+  reifyIndices = unreifiable "KnownSubset" "multiple elements of a type-level list"
+
+instance KnownSubset '[] es where
+  reifyIndices = []
+
+instance (KnownSubset es es', e :> es') => KnownSubset (e ': es) es' where
+  reifyIndices = reifyIndex @_ @e @es' : reifyIndices @_ @es @es'
+
+-- | Get a known subset of the record. Amortized \( O(m) \).
+pick :: ∀ es es' f. KnownSubset es es' => Rec f es' -> Rec f es
+pick (Rec off _ arr) = Rec 0 (reifyLen @_ @es) $ runArray do
+  marr <- newArr (reifyLen @_ @es)
+  for_ (zip [0..] $ reifyIndices @_ @es @es') \(newIx, oldIx) -> do
+    el <- indexArrayM arr (off + oldIx)
+    writeArray marr newIx el
+  pure marr
+
+data DropPhase = EmptyOp | DropOp !Int
+data ConcatPhase = IdOp DropPhase | ConcatOp !Int [Int] DropPhase
+
+-- | @es@ is a subset of @es'@. This works on both known lists and lists with polymorphic tails. E.g. all of the
+-- following work:
+--
+-- @
+-- Subset '[3, 1] '[1, 2, 3]
+-- Subset '[3, 1] (1 : 2 : 3 : es)
+-- Subset (3 : 1 : es) (1 : 2 : 3 : es)
+-- @
+class Subset (es :: [k]) (es' :: [k]) where
+  reifyExtraction :: ConcatPhase
+  reifyExtraction = unreifiable "Subset" "a subsequence of a type-level list"
+
+instance Subset '[] es' where
+  reifyExtraction = IdOp EmptyOp
+
+instance (e :> es', Subset es es') => Subset (e : es) es' where
+  reifyExtraction = case reifyExtraction @_ @es @es' of
+    IdOp ro          -> ConcatOp 1 [reifyIndex @_ @e @es'] ro
+    ConcatOp n xs ro -> ConcatOp (1 + n) (reifyIndex @_ @e @es' : xs) ro
+
+instance {-# INCOHERENT #-} Suffix es es' => Subset es es' where
+  reifyExtraction = IdOp (DropOp $ reifyPrefix @_ @es @es')
+
+-- | Extract a subset out of the record. \( O(n) \).
+extract :: ∀ es es' f. Subset es es' => Rec f es' -> Rec f es
+extract (Rec off len arr) = case reifyExtraction @_ @es @es' of
+  IdOp ro -> case ro of
+    EmptyOp        -> Rec 0 0 emptyArray
+    DropOp dropped -> Rec (off + dropped) (len - dropped) arr
+  ConcatOp added addIxs ro -> case ro of
+    EmptyOp  -> Rec 0 added $ runArray do
+      marr <- newArr added
+      for_ (zip [0..] $ addIxs) \(newIx, oldIx) -> do
+        el <- indexArrayM arr (off + oldIx)
+        writeArray marr newIx el
+      pure marr
+    DropOp dropped -> Rec 0 (len - dropped + added) $ runArray do
+      marr <- newArr (len - dropped + added)
+      for_ (zip [0..] $ addIxs) \(newIx, oldIx) -> do
+        el <- indexArrayM arr (off + oldIx)
+        writeArray marr newIx el
+      for_ [0 .. len - dropped - 1] \ix -> do
+        el <- indexArrayM arr (off + dropped + ix)
+        writeArray marr (added + ix) el
+      pure marr
+{-# INLINE extract #-}

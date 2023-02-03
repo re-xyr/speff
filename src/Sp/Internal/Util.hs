@@ -12,6 +12,8 @@ pattern Any x <- (unsafeCoerce -> x)
   where Any x = unsafeCoerce x
 {-# COMPLETE Any #-}
 
+-- | Coerce an 'Any' value to a certain type. This is generally unsafe and it is your responsibility to ensure
+-- that the type you're coercing into is the original type that the 'Any' value is coerced from.
 fromAny :: Any -> a
 fromAny (Any x) = x
 

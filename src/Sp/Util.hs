@@ -34,6 +34,8 @@ import           Data.Foldable       (for_)
 import           Data.IORef          (IORef, readIORef, writeIORef)
 import           Data.Kind           (Type)
 import           Data.Tuple          (swap)
+import           Sp.Internal.Env     ((:>))
+import           Sp.Internal.Handle
 import           Sp.Internal.Monad
 
 -- | Provides an environment value of type @r@, and you can override it in a local scope.
