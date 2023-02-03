@@ -24,7 +24,7 @@ import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.Atomics.Counter   (AtomicCounter, incrCounter, newCounter)
 import           Data.IORef             (IORef, newIORef, readIORef, writeIORef)
 import           Data.Kind              (Type)
-import           Data.Type.Equality     (TestEquality (testEquality), type (:~:) (Refl))
+import           Data.Type.Equality     (type (:~:) (Refl))
 import           GHC.Exts               (maskAsyncExceptions#, maskUninterruptible#, unmaskAsyncExceptions#)
 import           GHC.IO                 (IO (IO))
 import           System.IO.Unsafe       (unsafePerformIO)
@@ -40,8 +40,10 @@ freshMarker = liftIO $ Marker <$> incrCounter 1 uniqueSource
 type role Marker representational
 newtype Marker (a :: Type) = Marker Int
 
-instance TestEquality Marker where
-  testEquality (Marker l) (Marker r) =
+-- | Check the equality of two markers, and if so provide a proof that the type parameters are equal. This does not
+-- warrant a @TestEquality@ instance because it requires decidable equality over the type parameters.
+eqMarker :: Marker a -> Marker b -> Maybe (a :~: b)
+eqMarker (Marker l) (Marker r) =
     if l == r then Just (unsafeCoerce Refl) else Nothing
 
 -- We don't force the value because that makes the semantics nonstandard
@@ -89,10 +91,10 @@ prompt f = do
 promptWith :: Marker a -> Ctl a -> Ctl a
 promptWith !mark m = Ctl $ unCtl m >>= \case
   Pure a -> pure $ Pure a
-  Raise mark' r -> case testEquality mark mark' of
+  Raise mark' r -> case eqMarker mark mark' of
     Just Refl -> unCtl r
     Nothing   -> pure $ Raise mark' r
-  Yield mark' ctl cont -> case testEquality mark mark' of
+  Yield mark' ctl cont -> case eqMarker mark mark' of
     Just Refl -> unCtl $ ctl (promptWith mark . cont)
     Nothing   -> pure $ Yield mark' ctl (promptWith mark . cont)
 
