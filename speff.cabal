@@ -77,8 +77,6 @@ library
     -fdicts-strict
     -flate-dmd-anal
     -fspec-constr
-    -fliberate-case
-    -fstatic-argument-transformation
   exposed-modules:
     Sp.Internal.Ctl
     Sp.Internal.Env
