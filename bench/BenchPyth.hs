@@ -21,7 +21,7 @@ programSp upbound = do
   x <- S.choice [1..upbound]
   y <- S.choice [1..upbound]
   z <- S.choice [1..upbound]
-  if (x*x + y*y == z*z) then return (x,y,z) else S.send S.Empty
+  if x*x + y*y == z*z then return (x,y,z) else S.send S.Empty
 {-# NOINLINE programSp #-}
 
 pythSp :: Int -> [(Int, Int, Int)]
@@ -36,7 +36,7 @@ programEv upbound = do
   x <- E.perform E.choose upbound
   y <- E.perform E.choose upbound
   z <- E.perform E.choose upbound
-  if (x*x + y*y == z*z) then return (x,y,z) else E.perform (\r -> E.none r) ()
+  if x*x + y*y == z*z then return (x,y,z) else E.perform (\r -> E.none r) ()
 {-# NOINLINE programEv #-}
 
 pythEv :: Int -> [(Int, Int, Int)]
@@ -51,7 +51,7 @@ programSem upbound = do
   x <- choice upbound
   y <- choice upbound
   z <- choice upbound
-  if (x*x + y*y == z*z) then return (x,y,z) else empty
+  if x*x + y*y == z*z then return (x,y,z) else empty
   where
     choice 0 = empty
     choice n = choice (n - 1) <|> pure n
@@ -69,7 +69,7 @@ programFused upbound = do
   x <- choice upbound
   y <- choice upbound
   z <- choice upbound
-  if (x*x + y*y == z*z) then return (x,y,z) else empty
+  if x*x + y*y == z*z then return (x,y,z) else empty
   where choice x = F.oneOf [1..x]
 {-# NOINLINE programFused #-}
 
@@ -85,7 +85,7 @@ programFreer upbound = do
   x <- choice upbound
   y <- choice upbound
   z <- choice upbound
-  if (x*x + y*y == z*z) then return (x,y,z) else empty
+  if x*x + y*y == z*z then return (x,y,z) else empty
   where
     choice 0 = empty
     choice n = choice (n - 1) <|> pure n

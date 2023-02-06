@@ -1,5 +1,4 @@
-{-# LANGUAGE AllowAmbiguousTypes     #-}
-{-# LANGUAGE UndecidableSuperClasses #-}
+{-# LANGUAGE AllowAmbiguousTypes #-}
 -- |
 -- Copyright: (c) 2021 Xy Ren
 -- License: BSD3

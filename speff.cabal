@@ -36,32 +36,30 @@ common lang
     -Wunused-type-patterns
   default-extensions:
     BlockArguments
-    DerivingStrategies
-    GADTs
-    LambdaCase
-    ScopedTypeVariables
-    TypeApplications
-    TypeOperators
-    UnicodeSyntax
-    KindSignatures
+    BangPatterns
+    ConstraintKinds
     DataKinds
-    PolyKinds
-    RoleAnnotations
-    TypeFamilies
-    MultiParamTypeClasses
+    EmptyCase
     FlexibleContexts
     FlexibleInstances
-    UndecidableInstances
-    RankNTypes
-    ConstraintKinds
-    EmptyCase
-    TupleSections
-    BangPatterns
-    PatternSynonyms
-    ViewPatterns
     FunctionalDependencies
+    GADTs
+    LambdaCase
     MagicHash
     NoStarIsType
+    PatternSynonyms
+    PolyKinds
+    RankNTypes
+    RoleAnnotations
+    ScopedTypeVariables
+    TupleSections
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    UndecidableInstances
+    UndecidableSuperClasses
+    UnicodeSyntax
+    ViewPatterns
 
 common dump
   ghc-options:
