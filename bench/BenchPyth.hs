@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- Benchmarking yield-intensive code
 module BenchPyth where
 
@@ -7,9 +8,11 @@ import qualified Control.Carrier.NonDet.Church as F
 import qualified Control.Carrier.Reader        as F
 import qualified Control.Ev.Eff                as E
 import qualified Control.Ev.Util               as E
+#ifdef SPEFF_BENCH_FREER_SIMPLE
 import qualified Control.Monad.Freer           as FS
 import qualified Control.Monad.Freer.NonDet    as FS
 import qualified Control.Monad.Freer.Reader    as FS
+#endif
 import qualified Polysemy                      as P
 import qualified Polysemy.NonDet               as P
 import qualified Polysemy.Reader               as P
@@ -80,6 +83,7 @@ pythFusedDeep :: Int -> [(Int, Int, Int)]
 pythFusedDeep n = F.run $ run $ run $ run $ run $ run $ F.runNonDetA $ run $ run $ run $ run $ run $ programFused n
   where run = F.runReader ()
 
+#ifdef SPEFF_BENCH_FREER_SIMPLE
 programFreer :: FS.Member FS.NonDet es => Int -> FS.Eff es (Int, Int, Int)
 programFreer upbound = do
   x <- choice upbound
@@ -97,3 +101,4 @@ pythFreer n = FS.run $ FS.makeChoiceA $ programFreer n
 pythFreerDeep :: Int -> [(Int, Int, Int)]
 pythFreerDeep n = FS.run $ run $ run $ run $ run $ run $ FS.makeChoiceA $ run $ run $ run $ run $ run $ programFreer n
   where run = FS.runReader ()
+#endif

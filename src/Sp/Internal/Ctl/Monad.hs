@@ -1,4 +1,4 @@
-module Sp.Internal.Ctl
+module Sp.Internal.Ctl.Monad
   ( Marker
   , Ctl
   , prompt
@@ -99,7 +99,7 @@ prompt f = do
   promptWith mark (f mark)
 
 promptWith :: Marker a -> Ctl a -> Ctl a
-promptWith !mark m = Ctl $ unCtl m >>= \case
+promptWith !mark (Ctl m) = Ctl $ m >>= \case
   Pure a -> pure $ Pure a
   Raise mark' r -> case eqMarker mark mark' of
     Just Refl -> unCtl r
@@ -167,7 +167,7 @@ unblock = liftMap \(IO m) -> IO $ unmaskAsyncExceptions# m
 blockUninterruptible = liftMap \(IO m) -> IO $ maskUninterruptible# m
 
 -- | Lifted version of 'Exception.mask'.
-mask :: ((forall x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
+mask :: ((∀ x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
 mask io = liftIO getMaskingState >>= \case
   Unmasked              -> block $ io unblock
   MaskedInterruptible   -> io block
@@ -178,7 +178,7 @@ mask_ :: Ctl a -> Ctl a
 mask_ io = mask (\_ -> io)
 
 -- | Lifted version of 'Exception.uninterruptibleMask'.
-uninterruptibleMask :: ((forall x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
+uninterruptibleMask :: ((∀ x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
 uninterruptibleMask io = liftIO getMaskingState >>= \case
   Unmasked              -> blockUninterruptible $ io unblock
   MaskedInterruptible   -> blockUninterruptible $ io block

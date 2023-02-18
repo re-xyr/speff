@@ -31,6 +31,7 @@ common lang
     -Widentities
     -Wincomplete-record-updates
     -Wincomplete-uni-patterns
+    -Wmissing-deriving-strategies
     -Wno-unticked-promoted-constructors
     -Wpartial-fields
     -Wunused-type-patterns
@@ -39,6 +40,9 @@ common lang
     BangPatterns
     ConstraintKinds
     DataKinds
+    DeriveAnyClass
+    DerivingStrategies
+    DerivingVia
     EmptyCase
     FlexibleContexts
     FlexibleInstances
@@ -68,21 +72,38 @@ common dump
     -dsuppress-all
     -dsuppress-uniques
 
+flag native-delcont
+  description: Build with native delimited continuation support from GHC 9.6+
+  default: False
+  manual: True
+
+flag bench-freer-simple
+  description: Enable benchmark for the @freer-simple@ library
+  default: True
+  manual: False
+
 library
   import:          lang, dump
   hs-source-dirs:  src
   ghc-options:
     -fdicts-strict
     -flate-dmd-anal
+    -fliberate-case
     -fspec-constr
   exposed-modules:
-    Sp.Internal.Ctl
     Sp.Internal.Env
     Sp.Internal.Handle
     Sp.Internal.Monad
     Sp.Internal.Util
     Sp.Eff
     Sp.Util
+  if flag(native-delcont)
+    cpp-options: -DSPEFF_NATIVE_DELCONT
+    exposed-modules:
+      Sp.Internal.Ctl.Native
+  else
+    exposed-modules:
+      Sp.Internal.Ctl.Monad
 
 benchmark speff-bench
   import:          lang, dump
@@ -95,11 +116,12 @@ benchmark speff-bench
   build-depends:
     speff,
     eveff          == 1.0.0.2,
-    freer-simple   == 1.2.1.2,
     fused-effects  == 1.1.2.1,
     mtl            == 2.2.2,
     polysemy       == 1.9.0.0,
     tasty-bench   ^>= 0.3,
+  if flag(bench-freer-simple)
+    build-depends: freer-simple == 1.2.1.2
   other-modules:
     BenchCatch
     BenchCountdown

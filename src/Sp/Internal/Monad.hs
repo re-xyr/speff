@@ -1,4 +1,5 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+{-# LANGUAGE CPP                 #-}
 module Sp.Internal.Monad
   ( Eff
   , Effect
@@ -25,7 +26,11 @@ import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           Data.IORef             (IORef)
 import           Data.Kind              (Type)
-import           Sp.Internal.Ctl
+#ifdef SPEFF_NATIVE_DELCONT
+import           Sp.Internal.Ctl.Native
+#else
+import           Sp.Internal.Ctl.Monad
+#endif
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
 import           Sp.Internal.Util       (DictRep, reflectDict)
@@ -78,15 +83,9 @@ class Handling (esSend :: [Effect]) (es :: [Effect]) (r :: Type) | esSend -> es 
 data HandlingDict es r = Handling (Env es) !(Marker r)
 type instance DictRep (Handling _ es r) = HandlingDict es r
 
--- | The handle-site context.
-handlingEs :: ∀ esSend es r. Handling esSend es r => Env es
-handlingEs = case handlingDict @esSend of
-  Handling es _ -> es
-
--- | The marker of the prompt frame installed by the current handler.
-handlingMarker :: ∀ esSend es r. Handling esSend es r => Marker r
-handlingMarker = case handlingDict @esSend of
-  Handling _ mark -> mark
+-- | Reify the handle-site context.
+withHandling :: ∀ esSend es r a. Handling esSend es r => (HandlingDict es r -> a) -> a
+withHandling f = f (handlingDict @esSend)
 
 -- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
 type Handler e es r = ∀ esSend a. Handling esSend es r => e :> esSend => e (Eff esSend) a -> Eff esSend a
@@ -130,7 +129,7 @@ data Localized (tag :: k) :: Effect
 
 -- | Perform an operation from the handle-site.
 embed :: ∀ esSend es r a. Handling esSend es r => Eff es a -> Eff esSend a
-embed (Eff m) = Eff \_ -> m $ handlingEs @esSend
+embed (Eff m) = withHandling @esSend \(Handling es _) -> Eff \_ -> m es
 {-# INLINE embed #-}
 
 -- | Perform an operation from the handle-site, while being able to convert an operation from the perform-site to the
@@ -140,12 +139,13 @@ withUnembed
   .  Handling esSend es r
   => (∀ tag. (Eff esSend a -> Eff (Localized tag : es) a) -> Eff (Localized tag : es) a)
   -> Eff esSend a
-withUnembed f = Eff \esSend -> unEff (f \(Eff m) -> Eff \_ -> m esSend) $! Rec.consNull $ handlingEs @esSend
+withUnembed f = withHandling @esSend \(Handling es _) ->
+  Eff \esSend -> unEff (f \(Eff m) -> Eff \_ -> m esSend) $! Rec.consNull es
 {-# INLINE withUnembed #-}
 
 -- | Abort with a result value.
 abort :: ∀ esSend es r a. Handling esSend es r => Eff es r -> Eff esSend a
-abort (Eff m) = Eff \_ -> raise (handlingMarker @esSend) $ m $ handlingEs @esSend
+abort (Eff m) = withHandling @esSend \(Handling es mark) -> Eff \_ -> raise mark $ m es
 {-# INLINE abort #-}
 
 -- | Capture and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
@@ -154,8 +154,8 @@ control
   .  Handling esSend es r
   => (∀ tag. (Eff esSend a -> Eff (Localized tag : es) r) -> Eff (Localized tag : es) r)
   -> Eff esSend a
-control f = Eff \esSend -> yield (handlingMarker @esSend) \cont ->
-  unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.consNull $ handlingEs @esSend
+control f = withHandling @esSend \(Handling es mark) ->
+  Eff \esSend -> yield mark \cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.consNull es
 {-# INLINE control #-}
 
 -- | Unwrap the 'Eff' monad.

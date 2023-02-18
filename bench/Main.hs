@@ -1,3 +1,6 @@
+{-# LANGUAGE CPP #-}
+module Main where
+
 import           BenchCatch
 import           BenchCountdown
 import           BenchLocal
@@ -12,8 +15,10 @@ main = defaultMain
     , bench "sp.deep" $ nf countdownSpDeep x
     , bench "ev.shallow" $ nf countdownEv x
     , bench "ev.deep" $ nf countdownEvDeep x
+#ifdef SPEFF_BENCH_FREER_SIMPLE
     , bench "freer.shallow" $ nf countdownFreer x
     , bench "freer.deep" $ nf countdownFreerDeep x
+#endif
     , bench "mtl.shallow" $ nf countdownMtl x
     , bench "mtl.deep" $ nf countdownMtlDeep x
     , bench "fused.shallow" $ nf countdownFused x
@@ -26,8 +31,10 @@ main = defaultMain
     , bench "sp.deep" $ nf pythSpDeep x
     , bench "ev.shallow" $ nf pythEv x
     , bench "ev.deep" $ nf pythEvDeep x
+#ifdef SPEFF_BENCH_FREER_SIMPLE
     , bench "freer.shallow" $ nf pythFreer x
     , bench "freer.deep" $ nf pythFreerDeep x
+#endif
     , bench "fused.shallow" $ nf pythFused x
     , bench "fused.deep" $ nf pythFusedDeep x
     , bench "sem.shallow" $ nf pythSem x

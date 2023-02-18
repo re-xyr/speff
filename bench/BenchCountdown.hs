@@ -1,3 +1,4 @@
+{-# LANGUAGE CPP #-}
 -- Benchmarking effect invocation and monadic bind
 module BenchCountdown where
 
@@ -5,9 +6,11 @@ import qualified Control.Carrier.Reader       as F
 import qualified Control.Carrier.State.Strict as F
 import qualified Control.Ev.Eff               as E
 import qualified Control.Ev.Util              as E
+#ifdef SPEFF_BENCH_FREER_SIMPLE
 import qualified Control.Monad.Freer          as FS
 import qualified Control.Monad.Freer.Reader   as FS
 import qualified Control.Monad.Freer.State    as FS
+#endif
 import qualified Control.Monad.Identity       as M
 import qualified Control.Monad.Reader         as M
 import qualified Control.Monad.State.Strict   as M
@@ -68,6 +71,7 @@ countdownFusedDeep :: Int -> (Int, Int)
 countdownFusedDeep n = F.run $ runR $ runR $ runR $ runR $ runR $ F.runState n $ runR $ runR $ runR $ runR $ runR $ programFused
   where runR = F.runReader ()
 
+#ifdef SPEFF_BENCH_FREER_SIMPLE
 programFreer :: FS.Member (FS.State Int) es => FS.Eff es Int
 programFreer = do
   x <- FS.get @Int
@@ -84,6 +88,7 @@ countdownFreer n = FS.run $ FS.runState n programFreer
 countdownFreerDeep :: Int -> (Int, Int)
 countdownFreerDeep n = FS.run $ runR $ runR $ runR $ runR $ runR $ FS.runState n $ runR $ runR $ runR $ runR $ runR $ programFreer
   where runR = FS.runReader ()
+#endif
 
 programSem :: P.Member (P.State Int) es => P.Sem es Int
 programSem = do

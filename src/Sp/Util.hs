@@ -14,8 +14,8 @@ module Sp.Util
     -- * Error
   , Error (..)
   , throw
-  , catch
   , try
+  , catch
   , runError
     -- * Writer
   , Writer (..)
@@ -30,7 +30,6 @@ module Sp.Util
 
 import           Control.Applicative (Alternative (empty, (<|>)))
 import           Data.Atomics        (atomicModifyIORefCAS, atomicModifyIORefCAS_)
-import           Data.Foldable       (for_)
 import           Data.IORef          (IORef, readIORef, writeIORef)
 import           Data.Kind           (Type)
 import           Data.Tuple          (swap)
@@ -95,24 +94,24 @@ runState s m = unsafeState s \r -> do
 -- | Allows you to throw error values of type @e@ and catching these errors too.
 data Error (e :: Type) :: Effect where
   Throw :: e -> Error e m a
-  Catch :: m a -> (e -> m a) -> Error e m a
+  Try :: m a -> Error e m (Either e a)
 
 -- | Throw an error.
 throw :: Error e :> es => e -> Eff es a
 throw e = send (Throw e)
 
--- | Catch any error thrown by a computation and handle it with a function.
-catch :: Error e :> es => Eff es a -> (e -> Eff es a) -> Eff es a
-catch m h = send (Catch m h)
-
 -- | Catch any error thrown by a computation and return the result as an 'Either'.
 try :: Error e :> es => Eff es a -> Eff es (Either e a)
-try m = catch (Right <$> m) (pure . Left)
+try m = send (Try m)
+
+-- | Catch any error thrown by a computation and handle it with a function.
+catch :: Error e :> es => Eff es a -> (e -> Eff es a) -> Eff es a
+catch m h = try m >>= either h pure
 
 handleError :: ∀ e es a. Handler (Error e) es (Either e a)
 handleError = \case
-  Throw e   -> abort (pure $ Left e)
-  Catch m f -> either f pure =<< interpose (handleError @e) (Right <$> m)
+  Throw e -> abort (pure $ Left e)
+  Try m   -> interpose (handleError @e) (Right <$> m)
 
 -- | Run the 'Error' effect. If there is any unhandled error, it is returned as a 'Left'.
 runError :: ∀ e es a. Eff (Error e : es) a -> Eff es (Either e a)
@@ -131,19 +130,20 @@ tell x = send (Tell x)
 listen :: Writer w :> es => Eff es a -> Eff es (a, w)
 listen m = send (Listen m)
 
-handleWriter :: ∀ w es a. Monoid w => [IORef w] -> Handler (Writer w) es a
-handleWriter rs = \case
-  Tell x   -> for_ rs \r -> unsafeIO (atomicModifyIORefCAS_ r (<> x))
+handleWriter :: ∀ w es a. Monoid w => IORef w -> Handler (Writer w) es a
+handleWriter r = \case
+  Tell x   -> unsafeIO (atomicModifyIORefCAS_ r (<> x))
   Listen m -> unsafeState mempty \r' -> do
-    x <- interpose (handleWriter (r' : rs)) m
+    x <- interpose (handleWriter r') m
     w' <- unsafeIO (readIORef r')
+    unsafeIO $ atomicModifyIORefCAS_ r (<> w')
     pure (x, w')
 {-# INLINABLE handleWriter #-}
 
 -- | Run the 'Writer' state, with the append-only state as a monoidal value.
 runWriter :: Monoid w => Eff (Writer w : es) a -> Eff es (a, w)
 runWriter m = unsafeState mempty \r -> do
-  x <- interpret (handleWriter [r]) m
+  x <- interpret (handleWriter r) m
   w' <- unsafeIO (readIORef r)
   pure (x, w')
 {-# INLINABLE runWriter #-}
