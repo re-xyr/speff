@@ -9,6 +9,7 @@ module Sp.Util
   , State (..)
   , get
   , put
+  , modify
   , state
   , runState
     -- * Error
@@ -32,7 +33,6 @@ import           Control.Applicative (Alternative (empty, (<|>)))
 import           Data.Atomics        (atomicModifyIORefCAS, atomicModifyIORefCAS_)
 import           Data.IORef          (IORef, readIORef, writeIORef)
 import           Data.Kind           (Type)
-import           Data.Tuple          (swap)
 import           Sp.Internal.Env     ((:>))
 import           Sp.Internal.Handle
 import           Sp.Internal.Monad
@@ -63,7 +63,7 @@ runReader r = interpret (handleReader r)
 data State s :: Effect where
   Get :: State s m s
   Put :: s -> State s m ()
-  State :: (s -> (a, s)) -> State s m a
+  State :: (s -> (s, a)) -> State s m a
 
 -- | Get the mutable state.
 get :: State s :> es => Eff es s
@@ -73,16 +73,20 @@ get = send Get
 put :: State s :> es => s -> Eff es ()
 put x = send (Put x)
 
--- | Apply a function of type @s -> (a, s)@ on the mutable state, using the returned @s@ as the new state and
+-- | Apply a function to the mutable state.
+modify :: State s :> es => (s -> s) -> Eff es ()
+modify f = state ((, ()) . f)
+
+-- | Apply a function of type @s -> (s, a)@ on the mutable state, using the returned @s@ as the new state and
 -- returning the @a@.
-state :: State s :> es => (s -> (a, s)) -> Eff es a
+state :: State s :> es => (s -> (s, a)) -> Eff es a
 state f = send (State f)
 
 handleState :: IORef s -> Handler (State s) es a
 handleState r = \case
   Get     -> unsafeIO (readIORef r)
   Put s   -> unsafeIO (writeIORef r s)
-  State f -> unsafeIO (atomicModifyIORefCAS r (swap . f))
+  State f -> unsafeIO (atomicModifyIORefCAS r f)
 
 -- | Run the 'State' effect with an initial value for the mutable state.
 runState :: s -> Eff (State s : es) a -> Eff es (a, s)
