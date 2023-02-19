@@ -49,40 +49,6 @@ pythEvDeep :: Int -> [(Int, Int, Int)]
 pythEvDeep n = E.runEff $ run $ run $ run $ run $ run $ E.chooseAll $ run $ run $ run $ run $ run $ programEv n
   where run = E.reader ()
 
-programSem :: P.Member P.NonDet es => Int -> P.Sem es (Int, Int, Int)
-programSem upbound = do
-  x <- choice upbound
-  y <- choice upbound
-  z <- choice upbound
-  if x*x + y*y == z*z then return (x,y,z) else empty
-  where
-    choice 0 = empty
-    choice n = choice (n - 1) <|> pure n
-{-# NOINLINE programSem #-}
-
-pythSem :: Int -> [(Int, Int, Int)]
-pythSem n = P.run $ P.runNonDet $ programSem n
-
-pythSemDeep :: Int -> [(Int, Int, Int)]
-pythSemDeep n = P.run $ run $ run $ run $ run $ run $ P.runNonDet $ run $ run $ run $ run $ run $ programSem n
-  where run = P.runReader ()
-
-programFused :: (Monad m, Alternative m) => Int -> m (Int, Int, Int)
-programFused upbound = do
-  x <- choice upbound
-  y <- choice upbound
-  z <- choice upbound
-  if x*x + y*y == z*z then return (x,y,z) else empty
-  where choice x = F.oneOf [1..x]
-{-# NOINLINE programFused #-}
-
-pythFused :: Int -> [(Int, Int, Int)]
-pythFused n = F.run $ F.runNonDetA $ programFused n
-
-pythFusedDeep :: Int -> [(Int, Int, Int)]
-pythFusedDeep n = F.run $ run $ run $ run $ run $ run $ F.runNonDetA $ run $ run $ run $ run $ run $ programFused n
-  where run = F.runReader ()
-
 #ifdef SPEFF_BENCH_FREER_SIMPLE
 programFreer :: FS.Member FS.NonDet es => Int -> FS.Eff es (Int, Int, Int)
 programFreer upbound = do
@@ -102,3 +68,37 @@ pythFreerDeep :: Int -> [(Int, Int, Int)]
 pythFreerDeep n = FS.run $ run $ run $ run $ run $ run $ FS.makeChoiceA $ run $ run $ run $ run $ run $ programFreer n
   where run = FS.runReader ()
 #endif
+
+programFused :: (Monad m, Alternative m) => Int -> m (Int, Int, Int)
+programFused upbound = do
+  x <- choice upbound
+  y <- choice upbound
+  z <- choice upbound
+  if x*x + y*y == z*z then return (x,y,z) else empty
+  where choice x = F.oneOf [1..x]
+{-# NOINLINE programFused #-}
+
+pythFused :: Int -> [(Int, Int, Int)]
+pythFused n = F.run $ F.runNonDetA $ programFused n
+
+pythFusedDeep :: Int -> [(Int, Int, Int)]
+pythFusedDeep n = F.run $ run $ run $ run $ run $ run $ F.runNonDetA $ run $ run $ run $ run $ run $ programFused n
+  where run = F.runReader ()
+
+programSem :: P.Member P.NonDet es => Int -> P.Sem es (Int, Int, Int)
+programSem upbound = do
+  x <- choice upbound
+  y <- choice upbound
+  z <- choice upbound
+  if x*x + y*y == z*z then return (x,y,z) else empty
+  where
+    choice 0 = empty
+    choice n = choice (n - 1) <|> pure n
+{-# NOINLINE programSem #-}
+
+pythSem :: Int -> [(Int, Int, Int)]
+pythSem n = P.run $ P.runNonDet $ programSem n
+
+pythSemDeep :: Int -> [(Int, Int, Int)]
+pythSemDeep n = P.run $ run $ run $ run $ run $ run $ P.runNonDet $ run $ run $ run $ run $ run $ programSem n
+  where run = P.runReader ()

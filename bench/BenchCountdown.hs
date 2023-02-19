@@ -14,6 +14,9 @@ import qualified Control.Monad.Freer.State    as FS
 import qualified Control.Monad.Identity       as M
 import qualified Control.Monad.Reader         as M
 import qualified Control.Monad.State.Strict   as M
+import qualified Effectful                    as EL
+import qualified Effectful.Reader.Dynamic     as EL
+import qualified Effectful.State.Dynamic      as EL
 import qualified Polysemy                     as P
 import qualified Polysemy.Reader              as P
 import qualified Polysemy.State               as P
@@ -37,6 +40,24 @@ countdownSpDeep :: Int -> (Int, Int)
 countdownSpDeep n = S.runEff $ runR $ runR $ runR $ runR $ runR $ S.runState n $ runR $ runR $ runR $ runR $ runR $ programSp
   where runR = S.runReader ()
 
+programEffectful :: EL.State Int EL.:> es => EL.Eff es Int
+programEffectful = do
+  x <- EL.get @Int
+  if x == 0
+    then pure x
+    else do
+      EL.put (x - 1)
+      programEffectful
+{-# NOINLINE programEffectful #-}
+
+countdownEffectful :: Int -> (Int, Int)
+countdownEffectful n = EL.runPureEff $ EL.runStateLocal n programEffectful
+
+countdownEffectfulDeep :: Int -> (Int, Int)
+countdownEffectfulDeep n =
+  EL.runPureEff $ runR $ runR $ runR $ runR $ runR $ EL.runStateLocal n $ runR $ runR $ runR $ runR $ runR $ programEffectful
+  where runR = EL.runReader ()
+
 programEv :: E.State Int E.:? es => E.Eff es Int
 programEv = do
   x <- E.perform (E.get @Int) ()
@@ -53,23 +74,6 @@ countdownEv n = E.runEff $ E.state n programEv
 countdownEvDeep :: Int -> Int
 countdownEvDeep n = E.runEff $ runR $ runR $ runR $ runR $ runR $ E.state n $ runR $ runR $ runR $ runR $ runR $ programEv
   where runR = E.reader ()
-
-programFused :: F.Has (F.State Int) sig m => m Int
-programFused = do
-  x <- F.get @Int
-  if x == 0
-    then pure x
-    else do
-      F.put (x - 1)
-      programFused
-{-# NOINLINE programFused #-}
-
-countdownFused :: Int -> (Int, Int)
-countdownFused n = F.run $ F.runState n programFused
-
-countdownFusedDeep :: Int -> (Int, Int)
-countdownFusedDeep n = F.run $ runR $ runR $ runR $ runR $ runR $ F.runState n $ runR $ runR $ runR $ runR $ runR $ programFused
-  where runR = F.runReader ()
 
 #ifdef SPEFF_BENCH_FREER_SIMPLE
 programFreer :: FS.Member (FS.State Int) es => FS.Eff es Int
@@ -90,23 +94,6 @@ countdownFreerDeep n = FS.run $ runR $ runR $ runR $ runR $ runR $ FS.runState n
   where runR = FS.runReader ()
 #endif
 
-programSem :: P.Member (P.State Int) es => P.Sem es Int
-programSem = do
-  x <- P.get @Int
-  if x == 0
-    then pure x
-    else do
-      P.put (x - 1)
-      programSem
-{-# NOINLINE programSem #-}
-
-countdownSem :: Int -> (Int, Int)
-countdownSem n = P.run $ P.runState n programSem
-
-countdownSemDeep :: Int -> (Int, Int)
-countdownSemDeep n = P.run $ runR $ runR $ runR $ runR $ runR $ P.runState n $ runR $ runR $ runR $ runR $ runR $ programSem
-  where runR = P.runReader ()
-
 programMtl :: M.MonadState Int m => m Int
 programMtl = do
   x <- M.get @Int
@@ -123,3 +110,37 @@ countdownMtl n = M.runState programMtl n
 countdownMtlDeep :: Int -> (Int, Int)
 countdownMtlDeep n = M.runIdentity $ runR $ runR $ runR $ runR $ runR $ M.runStateT (runR $ runR $ runR $ runR $ runR $ programMtl) n
   where runR = (`M.runReaderT` ())
+
+programFused :: F.Has (F.State Int) sig m => m Int
+programFused = do
+  x <- F.get @Int
+  if x == 0
+    then pure x
+    else do
+      F.put (x - 1)
+      programFused
+{-# NOINLINE programFused #-}
+
+countdownFused :: Int -> (Int, Int)
+countdownFused n = F.run $ F.runState n programFused
+
+countdownFusedDeep :: Int -> (Int, Int)
+countdownFusedDeep n = F.run $ runR $ runR $ runR $ runR $ runR $ F.runState n $ runR $ runR $ runR $ runR $ runR $ programFused
+  where runR = F.runReader ()
+
+programSem :: P.Member (P.State Int) es => P.Sem es Int
+programSem = do
+  x <- P.get @Int
+  if x == 0
+    then pure x
+    else do
+      P.put (x - 1)
+      programSem
+{-# NOINLINE programSem #-}
+
+countdownSem :: Int -> (Int, Int)
+countdownSem n = P.run $ P.runState n programSem
+
+countdownSemDeep :: Int -> (Int, Int)
+countdownSemDeep n = P.run $ runR $ runR $ runR $ runR $ runR $ P.runState n $ runR $ runR $ runR $ runR $ runR $ programSem
+  where runR = P.runReader ()

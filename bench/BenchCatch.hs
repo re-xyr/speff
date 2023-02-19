@@ -3,6 +3,9 @@ module BenchCatch where
 
 import qualified Control.Carrier.Error.Either as F
 import qualified Control.Carrier.Reader       as F
+import qualified Effectful                    as EL
+import qualified Effectful.Error.Dynamic      as EL
+import qualified Effectful.Reader.Dynamic     as EL
 import qualified Polysemy                     as P
 import qualified Polysemy.Error               as P
 import qualified Polysemy.Reader              as P
@@ -22,18 +25,19 @@ catchSpDeep :: Int -> Either () ()
 catchSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runError $ run $ run $ run $ run $ run $ programSp n
   where run = S.runReader ()
 
-programSem :: P.Error () `P.Member` es => Int -> P.Sem es a
-programSem = \case
-  0 -> P.throw ()
-  n -> P.catch (programSem (n - 1)) \() -> P.throw ()
-{-# NOINLINE programSem #-}
+programEffectful :: EL.Error () EL.:> es => Int -> EL.Eff es a
+programEffectful = \case
+  0 -> EL.throwError ()
+  n -> EL.catchError (programEffectful (n - 1)) \_ () -> EL.throwError ()
+{-# NOINLINE programEffectful #-}
 
-catchSem :: Int -> Either () ()
-catchSem n = P.run $ P.runError $ programSem n
+catchEffectful :: Int -> Either (EL.CallStack, ()) ()
+catchEffectful n = EL.runPureEff $ EL.runError $ programEffectful n
 
-catchSemDeep :: Int -> Either () ()
-catchSemDeep n = P.run $ run $ run $ run $ run $ run $ P.runError $ run $ run $ run $ run $ run $ programSem n
-  where run = P.runReader ()
+catchEffectfulDeep :: Int -> Either (EL.CallStack, ()) ()
+catchEffectfulDeep n =
+  EL.runPureEff $ run $ run $ run $ run $ run $ EL.runError $ run $ run $ run $ run $ run $ programEffectful n
+  where run = EL.runReader ()
 
 programFused :: F.Has (F.Error ()) sig m => Int -> m a
 programFused = \case
@@ -47,3 +51,16 @@ catchFused n = F.run $ F.runError $ programFused n
 catchFusedDeep :: Int -> Either () ()
 catchFusedDeep n = F.run $ run $ run $ run $ run $ run $ F.runError $ run $ run $ run $ run $ run $ programFused n
   where run = F.runReader ()
+
+programSem :: P.Error () `P.Member` es => Int -> P.Sem es a
+programSem = \case
+  0 -> P.throw ()
+  n -> P.catch (programSem (n - 1)) \() -> P.throw ()
+{-# NOINLINE programSem #-}
+
+catchSem :: Int -> Either () ()
+catchSem n = P.run $ P.runError $ programSem n
+
+catchSemDeep :: Int -> Either () ()
+catchSemDeep n = P.run $ run $ run $ run $ run $ run $ P.runError $ run $ run $ run $ run $ run $ programSem n
+  where run = P.runReader ()

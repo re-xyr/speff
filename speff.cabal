@@ -99,11 +99,9 @@ library
     Sp.Util
   if flag(native-delcont)
     cpp-options: -DSPEFF_NATIVE_DELCONT
-    exposed-modules:
-      Sp.Internal.Ctl.Native
+    exposed-modules: Sp.Internal.Ctl.Native
   else
-    exposed-modules:
-      Sp.Internal.Ctl.Monad
+    exposed-modules: Sp.Internal.Ctl.Monad
 
 benchmark speff-bench
   import:          lang, dump
@@ -115,6 +113,7 @@ benchmark speff-bench
     -with-rtsopts=-T
   build-depends:
     speff,
+    effectful-core == 2.2.2.1,
     eveff          == 1.0.0.2,
     fused-effects  == 1.1.2.1,
     mtl            == 2.2.2,
