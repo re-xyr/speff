@@ -8,7 +8,7 @@ license:      BSD-3-Clause
 copyright:    2022 Xy Ren
 homepage:     https://github.com/re-xyr/speff
 bug-reports:  https://github.com/re-xyr/speff/issues
-tested-with:  GHC == {9.4.4, 9.2.5, 9.0.2, 8.10.7, 8.8.4, 8.6.5}
+tested-with:  GHC == {9.4.4, 9.2.5, 9.0.2, 8.10.7, 8.8.4}
 category:     Control, Effect, Language
 synopsis:     Efficient higher-order effect handlers
 
@@ -41,7 +41,6 @@ common lang
     ConstraintKinds
     DataKinds
     DeriveAnyClass
-    DerivingStrategies
     DerivingVia
     EmptyCase
     FlexibleContexts
@@ -77,11 +76,6 @@ flag native-delcont
   default: False
   manual: True
 
-flag bench-freer-simple
-  description: Enable benchmark for the @freer-simple@ library
-  default: True
-  manual: False
-
 library
   import:          lang, dump
   hs-source-dirs:  src
@@ -113,13 +107,13 @@ benchmark speff-bench
     -with-rtsopts=-T
   build-depends:
     speff,
-    effectful-core == 2.2.2.1,
-    eveff          == 1.0.0.2,
-    fused-effects  == 1.1.2.1,
-    mtl            == 2.2.2,
-    polysemy       == 1.9.0.0,
-    tasty-bench   ^>= 0.3,
-  if flag(bench-freer-simple)
+    effectful-core  == 2.2.2.1,
+    eveff           == 1.0.0.2,
+    fused-effects   == 1.1.2.1,
+    mtl             == 2.2.2,
+    polysemy        == 1.9.0.0,
+    tasty-bench    ^>= 0.3,
+  if impl(ghc < 9.6)
     build-depends: freer-simple == 1.2.1.2
   other-modules:
     BenchCatch

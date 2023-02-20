@@ -1,15 +1,15 @@
-packages:       speff.cabal
-jobs:           $ncpus
-benchmarks:     True
+packages:    speff.cabal
+jobs:        $ncpus
+benchmarks:  True
 
 package *
   ghc-options: -haddock
 
 if impl(ghc >= 9.6)
   package speff
-    flags: +native-delcont -bench-freer-simple
+    flags: +native-delcont
 
 if impl(ghc >= 9.4)
-  allow-newer: template-haskell
+  allow-newer: freer-simple:template-haskell
 if impl(ghc >= 9.6)
-  allow-newer: base
+  allow-newer: base, template-haskell

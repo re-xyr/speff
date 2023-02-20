@@ -1,4 +1,3 @@
-{-# LANGUAGE AllowAmbiguousTypes #-}
 module Sp.Internal.Util (Any, pattern Any, fromAny, DictRep, reflectDict) where
 
 import           Data.Kind     (Constraint, Type)

@@ -8,7 +8,7 @@ import qualified Control.Carrier.NonDet.Church as F
 import qualified Control.Carrier.Reader        as F
 import qualified Control.Ev.Eff                as E
 import qualified Control.Ev.Util               as E
-#ifdef SPEFF_BENCH_FREER_SIMPLE
+#if __GLASGOW_HASKELL__ < 906
 import qualified Control.Monad.Freer           as FS
 import qualified Control.Monad.Freer.NonDet    as FS
 import qualified Control.Monad.Freer.Reader    as FS
@@ -49,7 +49,7 @@ pythEvDeep :: Int -> [(Int, Int, Int)]
 pythEvDeep n = E.runEff $ run $ run $ run $ run $ run $ E.chooseAll $ run $ run $ run $ run $ run $ programEv n
   where run = E.reader ()
 
-#ifdef SPEFF_BENCH_FREER_SIMPLE
+#if __GLASGOW_HASKELL__ < 906
 programFreer :: FS.Member FS.NonDet es => Int -> FS.Eff es (Int, Int, Int)
 programFreer upbound = do
   x <- choice upbound
