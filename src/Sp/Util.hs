@@ -30,8 +30,9 @@ module Sp.Util
   ) where
 
 import           Control.Applicative (Alternative (empty, (<|>)))
-import           Data.Atomics        (atomicModifyIORefCAS, atomicModifyIORefCAS_)
-import           Data.IORef          (IORef, readIORef, writeIORef)
+import           Data.Atomics        (atomicModifyIORefCAS)
+import           Data.Foldable       (for_)
+import           Data.IORef          (IORef, modifyIORef', readIORef, writeIORef)
 import           Data.Kind           (Type)
 import           Sp.Internal.Env     ((:>))
 import           Sp.Internal.Handle
@@ -134,20 +135,19 @@ tell x = send (Tell x)
 listen :: Writer w :> es => Eff es a -> Eff es (a, w)
 listen m = send (Listen m)
 
-handleWriter :: ∀ w es a. Monoid w => IORef w -> Handler (Writer w) es a
-handleWriter r = \case
-  Tell x   -> unsafeIO (atomicModifyIORefCAS_ r (<> x))
-  Listen m -> unsafeState mempty \r' -> do
-    x <- interpose (handleWriter r') m
-    w' <- unsafeIO (readIORef r')
-    unsafeIO $ atomicModifyIORefCAS_ r (<> w')
+handleWriter :: ∀ w es a. Monoid w => [IORef w] -> Handler (Writer w) es a
+handleWriter rs = \case
+  Tell x   -> for_ rs \r -> unsafeIO (modifyIORef' r (<> x))
+  Listen m -> unsafeState mempty \r -> do
+    x <- interpose (handleWriter $ r : rs) m
+    w' <- unsafeIO (readIORef r)
     pure (x, w')
 {-# INLINABLE handleWriter #-}
 
 -- | Run the 'Writer' state, with the append-only state as a monoidal value.
 runWriter :: Monoid w => Eff (Writer w : es) a -> Eff es (a, w)
 runWriter m = unsafeState mempty \r -> do
-  x <- interpret (handleWriter r) m
+  x <- interpret (handleWriter [r]) m
   w' <- unsafeIO (readIORef r)
   pure (x, w')
 {-# INLINABLE runWriter #-}
