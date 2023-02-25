@@ -86,16 +86,16 @@ library
     -fspec-constr
   exposed-modules:
     Sp.Internal.Env
-    Sp.Internal.Handle
     Sp.Internal.Monad
-    Sp.Internal.Util
     Sp.Eff
     Sp.Util
+  other-modules:
+    Sp.Internal.Handle
   if flag(native-delcont)
-    cpp-options: -DSPEFF_NATIVE_DELCONT
-    exposed-modules: Sp.Internal.Ctl.Native
+    cpp-options:    -DSPEFF_NATIVE_DELCONT
+    other-modules:  Sp.Internal.Ctl.Native
   else
-    exposed-modules: Sp.Internal.Ctl.Monad
+    other-modules:  Sp.Internal.Ctl.Monad
 
 benchmark speff-bench
   import:          lang, dump
