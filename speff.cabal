@@ -114,7 +114,8 @@ benchmark speff-bench
     polysemy        == 1.9.0.0,
     tasty-bench    ^>= 0.3,
   if impl(ghc < 9.6)
-    build-depends: freer-simple == 1.2.1.2
+    cpp-options:    -DSPEFF_BENCH_FREER_SIMPLE
+    build-depends:  freer-simple == 1.2.1.2
   other-modules:
     BenchCatch
     BenchCountdown

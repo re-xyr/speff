@@ -17,7 +17,7 @@ main = defaultMain
     , bench "effectful.deep" $ nf countdownEffectfulDeep x
     , bench "ev.shallow" $ nf countdownEv x
     , bench "ev.deep" $ nf countdownEvDeep x
-#if __GLASGOW_HASKELL__ < 906
+#if SPEFF_BENCH_FREER_SIMPLE
     , bench "freer.shallow" $ nf countdownFreer x
     , bench "freer.deep" $ nf countdownFreerDeep x
 #endif
@@ -33,7 +33,7 @@ main = defaultMain
     , bench "sp.deep" $ nf pythSpDeep x
     , bench "ev.shallow" $ nf pythEv x
     , bench "ev.deep" $ nf pythEvDeep x
-#if __GLASGOW_HASKELL__ < 906
+#ifdef SPEFF_BENCH_FREER_SIMPLE
     , bench "freer.shallow" $ nf pythFreer x
     , bench "freer.deep" $ nf pythFreerDeep x
 #endif

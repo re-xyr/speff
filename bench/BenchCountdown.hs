@@ -6,7 +6,7 @@ import qualified Control.Carrier.Reader       as F
 import qualified Control.Carrier.State.Strict as F
 import qualified Control.Ev.Eff               as E
 import qualified Control.Ev.Util              as E
-#if __GLASGOW_HASKELL__ < 906
+#ifdef SPEFF_BENCH_FREER_SIMPLE
 import qualified Control.Monad.Freer          as FS
 import qualified Control.Monad.Freer.Reader   as FS
 import qualified Control.Monad.Freer.State    as FS
@@ -75,7 +75,7 @@ countdownEvDeep :: Int -> Int
 countdownEvDeep n = E.runEff $ runR $ runR $ runR $ runR $ runR $ E.state n $ runR $ runR $ runR $ runR $ runR $ programEv
   where runR = E.reader ()
 
-#if __GLASGOW_HASKELL__ < 906
+#ifdef SPEFF_BENCH_FREER_SIMPLE
 programFreer :: FS.Member (FS.State Int) es => FS.Eff es Int
 programFreer = do
   x <- FS.get @Int
