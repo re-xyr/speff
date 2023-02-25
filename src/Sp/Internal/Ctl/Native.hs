@@ -1,6 +1,16 @@
 {-# LANGUAGE CPP              #-}
 {-# LANGUAGE UnboxedTuples    #-}
 {-# LANGUAGE UnliftedNewtypes #-}
+-- |
+-- Copyright: (c) 2023 Xy Ren
+-- License: BSD3
+-- Maintainer: xy.r@outlook.com
+-- Stability: experimental
+-- Portability: non-portable (GHC only)
+--
+-- Delimited control monad based on the GHC primops introduced by Alexis King. This implementation is zero cost for
+-- computations not utilizing delimited control. On the other hand, frequent capture in this monad is slower than the
+-- monadic implementation.
 module Sp.Internal.Ctl.Native
   ( Marker
   , Ctl
@@ -35,6 +45,7 @@ import           GHC.IO                   (IO (IO), unIO)
 import           System.IO.Unsafe         (unsafePerformIO)
 import           Unsafe.Coerce            (unsafeCoerce)
 
+-- Stub definitions intended for developing with GHC < 9.6, which do not have the proper primops
 #if __GLASGOW_HASKELL__ < 906
 newtype PromptTag# (a :: Type) = PromptTag# ByteArray#
 
@@ -59,16 +70,20 @@ control0# _ _ _ = error "control0#"
 
 data PromptTag (a :: Type) = PromptTag (PromptTag# a)
 
+-- | We do not utilize the 'PromptTag#' mechanism built into the primops, as they do not support any kind of unwinding
+-- handlers to be installed in the middle of the prompt frame and the control call.
 thePromptTag :: PromptTag a
 thePromptTag = unsafePerformIO $ IO
   \s0 -> case newPromptTag# s0 of
     (# s1, tag #) -> (# s1, PromptTag tag #)
 {-# NOINLINE thePromptTag #-}
 
+-- | Install a generic prompt frame without a specific tag.
 promptIO :: IO a -> IO a
 promptIO (IO m) = case thePromptTag of
   PromptTag tag -> IO (prompt# tag m)
 
+-- | Unwind the stack with the continuation until the first prompt frame created by 'promptIO'.
 control0IO :: (∀ r. (IO a -> IO r) -> IO r) -> IO a
 control0IO f = case thePromptTag of
   PromptTag tag -> IO $ control0# tag \cont -> unIO $ f \io -> IO (cont $ unIO io)
@@ -105,6 +120,8 @@ data Unwind a
   | ∀ (r :: Type).
     Abort !(Marker r) (Ctl r)
 
+-- | Unwindings are thrown to each prompt frame so that they can manipulate them. The absense of type parameters (hence
+-- 'Any') allows us to avoid @Typeable@.
 newtype UnwindException = UnwindException (Unwind Any)
   deriving anyclass Exception
 
@@ -156,7 +173,7 @@ promptWith !mark m = handle m \case
     Just Refl -> ctl (promptWith mark . cont)
     Nothing   -> unwindCC \cont' -> Capture mark' ctl (cont' . promptWith mark . cont)
 
--- | Take over control of the continuation up to the prompt frame specified by 'Marker'. See 'CaptureMode' for details.
+-- | Take over control of the continuation up to the prompt frame specified by 'Marker'.
 yield :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
 yield !mark ctl = unwindCC \cont -> Capture mark ctl cont
 

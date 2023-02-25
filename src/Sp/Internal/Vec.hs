@@ -1,3 +1,9 @@
+-- |
+-- Copyright: (c) 2022 Xy Ren
+-- License: BSD3
+-- Maintainer: xy.r@outlook.com
+-- Stability: experimental
+-- Portability: non-portable (GHC only)
 module Sp.Internal.Vec
   ( Vec
   , length
@@ -105,7 +111,11 @@ pick len ixs (Vec off _ arr) = Vec 0 len $ runArray do
     writeArray marr newIx $ indexArrayOffset arr (off + oldIx)
   pure marr
 
+-- | A drop operation: either empty the entire vector or drop a certain number of entries from the head.
 data DropPhase = EmptyOp | DropOp !Int
+
+-- | A drop-and-concat operation: perform a drop operation, then optionally concat back some entries from the original
+-- vector.
 data ConcatPhase = IdOp DropPhase | ConcatOp !Int [Int] DropPhase
 
 -- | Extract a subset out of the vector. \( O(n) \).

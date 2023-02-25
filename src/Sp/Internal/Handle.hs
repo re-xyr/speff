@@ -1,4 +1,12 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
+-- |
+-- Copyright: (c) 2022 Xy Ren
+-- License: BSD3
+-- Maintainer: xy.r@outlook.com
+-- Stability: experimental
+-- Portability: non-portable (GHC only)
+--
+-- Functions for effect handling, as well as effect stack manipulating.
 module Sp.Internal.Handle
   ( -- * Interpret
     Interpret

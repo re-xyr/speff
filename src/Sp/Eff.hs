@@ -1,3 +1,12 @@
+-- |
+-- Copyright: (c) 2022 Xy Ren
+-- License: BSD3
+-- Maintainer: xy.r@outlook.com
+-- Stability: experimental
+-- Portability: non-portable (GHC only)
+--
+-- Sp is an effect library supporting higher-order effects and scoped delimited control. It strives to be fast, sound,
+-- and easy to use.
 module Sp.Eff
   ( -- * Basic types and operations
     Effect

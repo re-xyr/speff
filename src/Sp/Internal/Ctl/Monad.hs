@@ -1,3 +1,13 @@
+-- |
+-- Copyright: (c) 2022 Xy Ren
+-- License: BSD3
+-- Maintainer: xy.r@outlook.com
+-- Stability: experimental
+-- Portability: non-portable (GHC only)
+--
+-- Delimited control monad based on the design of Xie et al. This implementation imposes much less cost (albeit still
+-- noticeable) on computations not utilizing delimited control than the naive implementation. It also doesn't rely on
+-- compiler-supplied primitive operations.
 module Sp.Internal.Ctl.Monad
   ( Marker
   , Ctl
@@ -145,8 +155,8 @@ instance MonadIO Ctl where
 instance MonadThrow Ctl where
   throwM = Ctl . Exception.throwIO
 
--- | Note that although both catching and masking are possible, implementing 'bracket' via them will not be
--- well-behaved wrt reentry; hence 'Ctl' is not 'Catch.MonadMask'.
+-- | Note that although both catching and masking are possible, implementing 'Catch.generalBracket' via them will not
+-- be well-behaved wrt reentry; hence 'Ctl' is not 'Catch.MonadMask'.
 instance MonadCatch Ctl where
   catch m h = liftMap (Exception.handle (unCtl . h)) m
 

@@ -1,5 +1,13 @@
 {-# LANGUAGE AllowAmbiguousTypes #-}
 {-# LANGUAGE CPP                 #-}
+-- |
+-- Copyright: (c) 2022 Xy Ren
+-- License: BSD3
+-- Maintainer: xy.r@outlook.com
+-- Stability: experimental
+-- Portability: non-portable (GHC only)
+--
+-- The effect monad, along with handling combinators that enable delimited control and higher-order effects.
 module Sp.Internal.Monad
   ( Eff
   , Env

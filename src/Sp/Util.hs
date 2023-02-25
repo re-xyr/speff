@@ -1,4 +1,12 @@
 {-# OPTIONS_GHC -Wno-orphans #-}
+-- |
+-- Copyright: (c) 2022 Xy Ren
+-- License: BSD3
+-- Maintainer: xy.r@outlook.com
+-- Stability: experimental
+-- Portability: non-portable (GHC only)
+--
+-- Predefined effects for the Sp library, exhibiting a range of abilities.
 module Sp.Util
   ( -- * Reader
     Reader (..)
