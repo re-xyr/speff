@@ -25,7 +25,7 @@ common lang
     base             >= 4.12 && < 4.19,
     atomic-primops  ^>= 0.8,
     exceptions      ^>= 0.10,
-    primitive       ^>= 0.7,
+    primitive        >= 0.7 && < 0.9,
   ghc-options:
     -Wall
     -Widentities
@@ -72,9 +72,9 @@ common dump
     -dsuppress-uniques
 
 flag native-delcont
-  description: Build with native delimited continuation support from GHC 9.6+
-  default: False
-  manual: True
+  description:  Build with native delimited continuation support from GHC 9.6+
+  default:      False
+  manual:       True
 
 library
   import:          lang, dump
