@@ -82,7 +82,6 @@ library
   ghc-options:
     -fdicts-strict
     -flate-dmd-anal
-    -fliberate-case
     -fspec-constr
   exposed-modules:
     Sp.Internal.Env
