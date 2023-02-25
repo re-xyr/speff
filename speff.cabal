@@ -90,6 +90,7 @@ library
     Sp.Util
   other-modules:
     Sp.Internal.Handle
+    Sp.Internal.Vec
   if flag(native-delcont)
     cpp-options:    -DSPEFF_NATIVE_DELCONT
     other-modules:  Sp.Internal.Ctl.Native

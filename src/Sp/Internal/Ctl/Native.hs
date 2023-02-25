@@ -27,12 +27,11 @@ import           Data.IORef               (IORef, newIORef, readIORef, writeIORe
 import           Data.Kind                (Type)
 import           Data.Type.Equality       ((:~:) (Refl))
 #if __GLASGOW_HASKELL__ >= 906
-import           GHC.Exts                 (PromptTag#, control0#, newPromptTag#, prompt#)
+import           GHC.Exts                 (Any, PromptTag#, control0#, newPromptTag#, prompt#)
 #else
-import           GHC.Exts                 (ByteArray#, RealWorld, RuntimeRep, State#, TYPE)
+import           GHC.Exts                 (Any, ByteArray#, RealWorld, RuntimeRep, State#, TYPE)
 #endif
 import           GHC.IO                   (IO (IO), unIO)
-import           Sp.Internal.Util         (Any)
 import           System.IO.Unsafe         (unsafePerformIO)
 import           Unsafe.Coerce            (unsafeCoerce)
 

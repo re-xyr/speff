@@ -2,8 +2,9 @@
 {-# LANGUAGE CPP                 #-}
 module Sp.Internal.Monad
   ( Eff
+  , Env
   , Effect
-  , Handling
+  , HandleTag
   , Handler
   , unsafeIO
   , unsafeState
@@ -33,7 +34,6 @@ import           Sp.Internal.Ctl.Monad
 #endif
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
-import           Sp.Internal.Util       (DictRep, reflectDict)
 import           System.IO.Unsafe       (unsafePerformIO)
 
 -- | The kind of higher-order effects, parameterized by (1) the monad in which it was performed, and (2) the result
@@ -69,26 +69,12 @@ instance Monad (Eff es) where
   Eff m >>= f = Eff \es -> m es >>= \x -> unEff (f x) es
   {-# INLINE (>>=) #-}
 
--- | The handler context of a handler that was (1) __introduced__ in context @es@, (2) over an computation with
--- __eventual result type__ @r@, and (3) __handling__ an effect originating from context @esSend@. This typeclass
--- enables delimited control and scoped effects.
-class Handling (esSend :: [Effect]) (es :: [Effect]) (r :: Type) | esSend -> es r where
-  handlingDict :: HandlingDict es r
-  handlingDict = error
-    "Sp.Eff: nonexistent handling context! Don't attempt to manually define an instance for the 'Handling' typeclass."
-
--- | Concrete representation of @Handling esSend es r@. It is revealed that @esSend@ is only a phantom argument used
--- to ensure soundness (as it is the only other context apart from @es@ that is known to be within the handle site
--- context).
-data HandlingDict es r = Handling (Env es) !(Marker r)
-type instance DictRep (Handling _ es r) = HandlingDict es r
-
--- | Reify the handle-site context.
-withHandling :: ∀ esSend es r a. Handling esSend es r => (HandlingDict es r -> a) -> a
-withHandling f = f (handlingDict @esSend)
+-- | The tag associated to a handler that was /introduced/ in context @es@ over an computation with
+-- /eventual result type/ @r@. Value of this type enables delimited control and scoped effects.
+data HandleTag (tag :: Type) (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Marker r)
 
 -- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
-type Handler e es r = ∀ esSend a. Handling esSend es r => e :> esSend => e (Eff esSend) a -> Eff esSend a
+type Handler e es r = ∀ tag esSend a. e :> esSend => HandleTag tag es r -> e (Eff esSend) a -> Eff (Localized tag : esSend) a
 
 -- | This "unsafe" @IO@ function is perfectly safe in the sense that it won't panic or otherwise cause undefined
 -- behaviors; it is only unsafe when it is used to embed arbitrary @IO@ actions in any effect environment,
@@ -106,8 +92,7 @@ unsafeState x0 f = Eff \es -> promptState x0 \ref -> unEff (f ref) es
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
 toInternalHandler :: ∀ e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
-toInternalHandler mark es hdl = InternalHandler \(e :: e (Eff esSend) a) ->
-  reflectDict @(Handling esSend es r) hdl (Handling es mark) e
+toInternalHandler mark es hdl = InternalHandler \e -> alter Rec.pad $ hdl (HandleTag @() es mark) e
 
 -- | Do a trivial transformation over the effect context.
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
@@ -125,37 +110,37 @@ send e = Eff \es -> unEff (runHandler (Rec.index es) e) es
 
 -- | A "localized computaton"; this should be parameterized with an existential variable so the computation with this
 -- effect cannot escape a certain scope.
-data Localized (tag :: k) :: Effect
+data Localized (tag :: Type) :: Effect
 
 -- | Perform an operation from the handle-site.
-embed :: ∀ esSend es r a. Handling esSend es r => Eff es a -> Eff esSend a
-embed (Eff m) = withHandling @esSend \(Handling es _) -> Eff \_ -> m es
+embed :: Localized tag :> esSend => HandleTag tag es r -> Eff es a -> Eff esSend a
+embed (HandleTag es _) (Eff m) = Eff \_ -> m es
 {-# INLINE embed #-}
 
 -- | Perform an operation from the handle-site, while being able to convert an operation from the perform-site to the
 -- handle-site.
 withUnembed
-  :: ∀ esSend es r a
-  .  Handling esSend es r
-  => (∀ tag. (Eff esSend a -> Eff (Localized tag : es) a) -> Eff (Localized tag : es) a)
+  :: Localized tag :> esSend
+  => HandleTag tag es r
+  -> (∀ tag'. (∀ x. Eff esSend x -> Eff (Localized tag' : es) x) -> Eff (Localized tag' : es) a)
   -> Eff esSend a
-withUnembed f = withHandling @esSend \(Handling es _) ->
-  Eff \esSend -> unEff (f \(Eff m) -> Eff \_ -> m esSend) $! Rec.consNull es
+withUnembed (HandleTag es _) f =
+  Eff \esSend -> unEff (f \(Eff m) -> Eff \_ -> m esSend) $! Rec.pad es
 {-# INLINE withUnembed #-}
 
 -- | Abort with a result value.
-abort :: ∀ esSend es r a. Handling esSend es r => Eff es r -> Eff esSend a
-abort (Eff m) = withHandling @esSend \(Handling es mark) -> Eff \_ -> raise mark $ m es
+abort :: Localized tag :> esSend => HandleTag tag es r -> Eff es r -> Eff esSend a
+abort (HandleTag es mark) (Eff m) = Eff \_ -> raise mark $ m es
 {-# INLINE abort #-}
 
 -- | Capture and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
 control
-  :: ∀ esSend es r a
-  .  Handling esSend es r
-  => (∀ tag. (Eff esSend a -> Eff (Localized tag : es) r) -> Eff (Localized tag : es) r)
+  :: Localized tag :> esSend
+  => HandleTag tag es r
+  -> (∀ tag'. (Eff esSend a -> Eff (Localized tag' : es) r) -> Eff (Localized tag' : es) r)
   -> Eff esSend a
-control f = withHandling @esSend \(Handling es mark) ->
-  Eff \esSend -> yield mark \cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.consNull es
+control (HandleTag es mark) f =
+  Eff \esSend -> yield mark \cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.pad es
 {-# INLINE control #-}
 
 -- | Unwrap the 'Eff' monad.
@@ -180,5 +165,5 @@ instance IOE :> es => MonadCatch (Eff es) where
 
 -- | Unwrap an 'Eff' monad with 'IO' computations.
 runIOE :: Eff '[IOE] a -> IO a
-runIOE m = runCtl $ unEff m (Rec.consNull Rec.empty)
+runIOE m = runCtl $ unEff m (Rec.pad Rec.empty)
 {-# INLINE runIOE #-}

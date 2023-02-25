@@ -10,7 +10,7 @@ module Sp.Eff
   , runIOE
   , runEff
     -- * Effect handling
-  , Handling
+  , HandleTag
   , Handler
     -- ** Providing handlers
   , Suffix
