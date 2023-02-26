@@ -14,6 +14,7 @@
 module Sp.Internal.Ctl.Native
   ( Marker
   , Ctl
+  , freshMarker
   , prompt
   , yield
   , raise
@@ -32,15 +33,16 @@ import qualified Control.Exception        as Exception
 import           Control.Monad.Catch      (MonadCatch (catch), MonadThrow)
 import           Control.Monad.Catch.Pure (MonadThrow (throwM))
 import           Control.Monad.IO.Class   (MonadIO (liftIO))
-import           Data.Atomics.Counter     (AtomicCounter, incrCounter, newCounter)
-import           Data.IORef               (IORef, newIORef, readIORef, writeIORef)
+import           Data.IORef               (IORef, readIORef, writeIORef)
 import           Data.Kind                (Type)
 import           Data.Type.Equality       ((:~:) (Refl))
+import           GHC.Exts                 (Any, RealWorld)
 #if __GLASGOW_HASKELL__ >= 906
-import           GHC.Exts                 (Any, PromptTag#, control0#, newPromptTag#, prompt#)
+import           GHC.Exts                 (PromptTag#, control0#, newPromptTag#, prompt#)
 #else
-import           GHC.Exts                 (Any, ByteArray#, RealWorld, RuntimeRep, State#, TYPE)
+import           GHC.Exts                 (ByteArray#, RuntimeRep, State#, TYPE)
 #endif
+import           Data.Primitive.PrimVar   (PrimVar, fetchAddInt, newPrimVar)
 import           GHC.IO                   (IO (IO), unIO)
 import           System.IO.Unsafe         (unsafePerformIO)
 import           Unsafe.Coerce            (unsafeCoerce)
@@ -89,13 +91,13 @@ control0IO f = case thePromptTag of
   PromptTag tag -> IO $ control0# tag \cont -> unIO $ f \io -> IO (cont $ unIO io)
 
 -- | The source from which we construct unique 'Marker's.
-uniqueSource :: AtomicCounter
-uniqueSource = unsafePerformIO (newCounter 0)
+uniqueSource :: PrimVar RealWorld Int
+uniqueSource = unsafePerformIO (newPrimVar 0)
 {-# NOINLINE uniqueSource #-}
 
 -- | Create a fresh 'Marker'.
 freshMarker :: ∀ a. Ctl (Marker a)
-freshMarker = Ctl $ Marker <$> incrCounter 1 uniqueSource
+freshMarker = liftIO $ Marker <$> fetchAddInt uniqueSource 1
 
 -- | A @'Marker' a@ marks a prompt frame over a computation returning @a@.
 type role Marker representational
@@ -155,23 +157,15 @@ unwindCC :: (∀ r. (Ctl a -> Ctl r) -> Unwind r) -> Ctl a
 unwindCC f = Ctl $ control0IO \cont -> runCtl $ unwind $ f (Ctl . cont . runCtl)
 {-# INLINE unwindCC #-}
 
--- | Prompt/reset. The safety measures of this function is rudimentary; if the 'Marker' escapes its scope or is used
--- in another thread then it stops being safe.
-prompt :: (Marker a -> Ctl a) -> Ctl a
-prompt f = do
-  mark <- freshMarker
-  promptWith mark (f mark)
-{-# INLINE prompt #-}
-
 -- | Prompt/reset with a specific marker. This is unsafe.
-promptWith :: Marker a -> Ctl a -> Ctl a
-promptWith !mark m = handle m \case
+prompt :: Marker a -> Ctl a -> Ctl a
+prompt !mark m = handle m \case
   Abort mark' r -> case eqMarker mark mark' of
     Just Refl -> r
     Nothing   -> raise mark' r
   Capture mark' ctl cont -> case eqMarker mark mark' of
-    Just Refl -> ctl (promptWith mark . cont)
-    Nothing   -> unwindCC \cont' -> Capture mark' ctl (cont' . promptWith mark . cont)
+    Just Refl -> ctl (prompt mark . cont)
+    Nothing   -> unwindCC \cont' -> Capture mark' ctl (cont' . prompt mark . cont)
 
 -- | Take over control of the continuation up to the prompt frame specified by 'Marker'.
 yield :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
@@ -181,23 +175,15 @@ yield !mark ctl = unwindCC \cont -> Capture mark ctl cont
 raise :: Marker r -> Ctl r -> Ctl a
 raise !mark r = unwind $ Abort mark r
 
--- | Create a state that backtracks. The safety measures of this function is rudimentary; it is not well-behaved if the
--- state is used in other threads, or escapes the scope.
-promptState :: s -> (IORef s -> Ctl a) -> Ctl a
-promptState s0 f = do
-  ref <- liftIO $ newIORef s0
-  promptStateWith ref (f ref)
-{-# INLINE promptState #-}
-
 -- | Set up backtracking on a specific state variable. This is unsafe.
-promptStateWith :: IORef s -> Ctl a -> Ctl a
-promptStateWith !ref m = handle m \case
+promptState :: IORef s -> Ctl a -> Ctl a
+promptState !ref m = handle m \case
   Abort mark r -> raise mark r
   Capture mark ctl cont -> do
     s0 <- liftIO $ readIORef ref
     unwindCC \cont' -> Capture mark ctl \x -> cont' do
       liftIO $ writeIORef ref s0
-      promptStateWith ref (cont x)
+      promptState ref (cont x)
 
 instance MonadThrow Ctl where
   throwM = Ctl . Exception.throwIO

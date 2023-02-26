@@ -38,8 +38,8 @@ module Sp.Util
   ) where
 
 import           Control.Applicative (Alternative (empty, (<|>)))
-import           Data.Atomics        (atomicModifyIORefCAS)
 import           Data.Foldable       (for_)
+import           Data.Functor        (($>))
 import           Data.IORef          (IORef, modifyIORef', readIORef, writeIORef)
 import           Data.Kind           (Type)
 import           Sp.Internal.Env     ((:>))
@@ -62,7 +62,7 @@ local f m = send (Local f m)
 handleReader :: r -> Handler (Reader r) es a
 handleReader !r _ = \case
   Ask       -> pure r
-  Local f m -> interpose (handleReader (f r)) m
+  Local f m -> interpose (handleReader $ f r) m
 
 -- | Run the 'Reader' effect with an environment value.
 runReader :: r -> Eff (Reader r : es) a -> Eff es a
@@ -95,7 +95,9 @@ handleState :: IORef s -> Handler (State s) es a
 handleState r _ = \case
   Get     -> unsafeIO (readIORef r)
   Put s   -> unsafeIO (writeIORef r s)
-  State f -> unsafeIO (atomicModifyIORefCAS r f)
+  State f -> unsafeIO do
+    (!s1, x) <- f <$> readIORef r
+    writeIORef r s1 $> x
 
 -- | Run the 'State' effect with an initial value for the mutable state.
 runState :: s -> Eff (State s : es) a -> Eff es (a, s)

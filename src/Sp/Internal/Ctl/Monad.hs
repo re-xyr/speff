@@ -11,6 +11,7 @@
 module Sp.Internal.Ctl.Monad
   ( Marker
   , Ctl
+  , freshMarker
   , prompt
   , yield
   , raise
@@ -31,23 +32,23 @@ import           Control.Monad          (ap, liftM, (<=<))
 import           Control.Monad.Catch    (MonadCatch, MonadThrow)
 import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
-import           Data.Atomics.Counter   (AtomicCounter, incrCounter, newCounter)
-import           Data.IORef             (IORef, newIORef, readIORef, writeIORef)
+import           Data.IORef             (IORef, readIORef, writeIORef)
 import           Data.Kind              (Type)
+import           Data.Primitive.PrimVar (PrimVar, fetchAddInt, newPrimVar)
 import           Data.Type.Equality     (type (:~:) (Refl))
-import           GHC.Exts               (maskAsyncExceptions#, maskUninterruptible#, unmaskAsyncExceptions#)
+import           GHC.Exts               (RealWorld, maskAsyncExceptions#, maskUninterruptible#, unmaskAsyncExceptions#)
 import           GHC.IO                 (IO (IO))
 import           System.IO.Unsafe       (unsafePerformIO)
 import           Unsafe.Coerce          (unsafeCoerce)
 
 -- | The source from which we construct unique 'Marker's.
-uniqueSource :: AtomicCounter
-uniqueSource = unsafePerformIO (newCounter 0)
+uniqueSource :: PrimVar RealWorld Int
+uniqueSource = unsafePerformIO (newPrimVar 0)
 {-# NOINLINE uniqueSource #-}
 
 -- | Create a fresh 'Marker'.
 freshMarker :: ∀ a. Ctl (Marker a)
-freshMarker = liftIO $ Marker <$> incrCounter 1 uniqueSource
+freshMarker = liftIO $ Marker <$> fetchAddInt uniqueSource 1
 
 -- | A @'Marker' a@ marks a prompt frame over a computation returning @a@.
 type role Marker representational
@@ -103,20 +104,15 @@ liftMap :: (IO (Result a) -> IO (Result a)) -> Ctl a -> Ctl a
 liftMap f (Ctl m) = Ctl $ extend (liftMap f) <$> f m
 
 -- | Install a prompt frame.
-prompt :: ∀ a. (Marker a -> Ctl a) -> Ctl a
-prompt f = do
-  mark <- freshMarker @a
-  promptWith mark (f mark)
-
-promptWith :: Marker a -> Ctl a -> Ctl a
-promptWith !mark (Ctl m) = Ctl $ m >>= \case
+prompt :: Marker a -> Ctl a -> Ctl a
+prompt !mark (Ctl m) = Ctl $ m >>= \case
   Pure a -> pure $ Pure a
   Raise mark' r -> case eqMarker mark mark' of
     Just Refl -> unCtl r
     Nothing   -> pure $ Raise mark' r
   Yield mark' ctl cont -> case eqMarker mark mark' of
-    Just Refl -> unCtl $ ctl (promptWith mark . cont)
-    Nothing   -> pure $ Yield mark' ctl (promptWith mark . cont)
+    Just Refl -> unCtl $ ctl (prompt mark . cont)
+    Nothing   -> pure $ Yield mark' ctl (prompt mark . cont)
 
 -- | Capture the resumption up to and including the prompt frame specified by the 'Marker'.
 yield :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
@@ -127,20 +123,15 @@ raise :: Marker r -> Ctl r -> Ctl a
 raise !mark r = Ctl $ pure $ Raise mark r
 
 -- | Introduce a mutable state that behaves well wrt reentry.
-promptState :: ∀ s r. s -> (IORef s -> Ctl r) -> Ctl r
-promptState x0 f = do
-  ref <- liftIO (newIORef x0)
-  promptStateWith ref (f ref)
-
-promptStateWith :: IORef s -> Ctl r -> Ctl r
-promptStateWith !ref (Ctl m) = Ctl $ m >>= \case
+promptState :: IORef s -> Ctl r -> Ctl r
+promptState !ref (Ctl m) = Ctl $ m >>= \case
   Pure x -> pure $ Pure x
   Raise mark x -> pure $ Raise mark x
   Yield mark ctl cont -> do
     s0 <- liftIO (readIORef ref)
     pure $ Yield mark ctl \x -> do
       liftIO (writeIORef ref s0)
-      promptStateWith ref (cont x)
+      promptState ref (cont x)
 
 -- | Unwrap the 'Ctl' monad.
 runCtl :: Ctl a -> IO a

@@ -33,7 +33,7 @@ import           Control.Monad          (ap, liftM)
 import           Control.Monad.Catch    (MonadCatch, MonadThrow)
 import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
-import           Data.IORef             (IORef)
+import           Data.IORef             (IORef, newIORef)
 import           Data.Kind              (Type)
 #ifdef SPEFF_NATIVE_DELCONT
 import           Sp.Internal.Ctl.Native
@@ -94,7 +94,9 @@ unsafeIO m = Eff (const $ liftIO m)
 -- | Introduce a mutable state that is well-behaved with respect to reentry. That is, no branch will observe mutations
 -- by any other simultaneous branch. This stops behaving as expected if you pass the 'IORef' out of scope.
 unsafeState :: s -> (IORef s -> Eff es a) -> Eff es a
-unsafeState x0 f = Eff \es -> promptState x0 \ref -> unEff (f ref) es
+unsafeState x0 f = Eff \es -> do
+  ref <- liftIO $ newIORef x0
+  promptState ref $ unEff (f ref) es
 {-# INLINE unsafeState #-}
 
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
@@ -109,7 +111,9 @@ alter f = \(Eff m) -> Eff \es -> m $! f es
 -- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
 -- frame, and then supply the internal handler to the given function to let it add that to the effect context.
 handle :: (InternalHandler e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
-handle f = \hdl (Eff m) -> Eff \es -> prompt \mark -> m $! f (toInternalHandler mark es hdl) es
+handle f = \hdl (Eff m) -> Eff \es -> do
+  mark <- freshMarker
+  prompt mark $ m $! f (toInternalHandler mark es hdl) es
 
 -- | Perform an effect operation.
 send :: e :> es => e (Eff es) a -> Eff es a
