@@ -74,7 +74,7 @@ empty = Rec Vec.empty
 
 -- | Prepend one entry to the record. /O/(/n/).
 cons :: f e -> Rec f es -> Rec f (e ': es)
-cons x (Rec vec) = Rec $ Vec.cons (Any x) vec
+cons x (Rec vec) = Rec $ Vec.cons (toAny x) vec
 
 -- | Prepend one null entry to the record. This entry can be normally evaluated (different from 'undefined'), but any
 -- attempt to use it will cause a runtime error. /O/(/n/).
@@ -151,7 +151,7 @@ index (Rec vec) = fromAny $ Vec.index (reifyIndex @_ @e @es) vec
 
 -- | Update an entry in the record. /O/(/n/).
 update :: ∀ e es f. e :> es => f e -> Rec f es -> Rec f es
-update x (Rec vec) = Rec $ Vec.update (reifyIndex @_ @e @es) (Any x) vec
+update x (Rec vec) = Rec $ Vec.update (reifyIndex @_ @e @es) (toAny x) vec
 
 --------------------------------------------------------------------------------
 -- Subset Operations -----------------------------------------------------------
@@ -228,14 +228,11 @@ extract (Rec vec) = Rec $ Vec.extract (reifyExtraction @_ @es @es') vec
 -- Any -------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 
--- | Coerce any boxed value into and from 'GHC.Exts.Any'. This is generally unsafe and it is your responsibility to
--- ensure that the type you're coercing into is the original type that the 'GHC.Exts.Any' value is coerced from.
-pattern Any :: ∀ a. a -> Any
-pattern Any x <- (unsafeCoerce -> x)
-  where Any x = unsafeCoerce x
-{-# COMPLETE Any #-}
+-- | Coerce any boxed value into 'GHC.Exts.Any'.
+toAny :: a -> Any
+toAny = unsafeCoerce
 
 -- | Coerce an 'GHC.Exts.Any' value to a certain type. This is generally unsafe and it is your responsibility to ensure
 -- that the type you're coercing into is the original type that the 'GHC.Exts.Any' value is coerced from.
 fromAny :: Any -> a
-fromAny (Any x) = x
+fromAny = unsafeCoerce

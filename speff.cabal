@@ -49,7 +49,6 @@ common lang
     LambdaCase
     MagicHash
     NoStarIsType
-    PatternSynonyms
     PolyKinds
     RankNTypes
     RoleAnnotations
@@ -61,7 +60,6 @@ common lang
     UndecidableInstances
     UndecidableSuperClasses
     UnicodeSyntax
-    ViewPatterns
 
 common dump
   ghc-options:
