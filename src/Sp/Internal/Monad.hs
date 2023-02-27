@@ -11,6 +11,7 @@
 module Sp.Internal.Monad
   ( Eff
   , Env
+  , InternalHandler
   , Effect
   , HandleTag
   , Handler
@@ -27,6 +28,10 @@ module Sp.Internal.Monad
   , runEff
   , IOE
   , runIOE
+  , dynamicWind
+  , mask
+  , uninterruptibleMask
+  , interruptible
   ) where
 
 #ifdef SPEFF_NATIVE_DELCONT
@@ -172,7 +177,7 @@ instance IOE :> es => MonadIO (Eff es) where
   liftIO = unsafeIO
   {-# INLINE liftIO #-}
 
-instance IOE :> es => MonadThrow (Eff es) where
+instance MonadThrow (Eff es) where
   throwM x = Eff \_ -> Catch.throwM x
   {-# INLINE throwM #-}
 
@@ -184,3 +189,36 @@ instance IOE :> es => MonadCatch (Eff es) where
 runIOE :: Eff '[IOE] a -> IO a
 runIOE m = runCtl $ unEff m (Rec.pad Rec.empty)
 {-# INLINE runIOE #-}
+
+-- | Attach a pre- and a post-action to a computation. The pre-action runs immediately before the computation, and the
+-- post-action runs immediately after the computation exits, whether normally, via an error, or via an exception.
+-- Additionally, the post-action runs immediately after any suspension of the enclosed computation and the pre-action
+-- runs immediately before any resumption of such suspension.
+--
+-- Therefore, this function acts like 'Control.Exception.bracket_' when there is no resumption of suspensions involved,
+-- except providing no protection against async exceptions. If you want such protection, please manually supply masked
+-- actions.
+--
+-- In all cases, it is guaranteed that pre- and post-actions are always executed in pairs; that is to say, it is
+-- impossible to have two calls to the pre-action without a call to the post-action interleaving them, or vice versa.
+-- This also means that the pre- and post-action are always executed the same number of times, discounting
+-- interruptions caused by async exceptions.
+dynamicWind :: Eff es () -> Eff es () -> Eff es a -> Eff es a
+dynamicWind (Eff before) (Eff after) (Eff action) =
+  Eff \es -> Ctl.dynamicWind (before es) (after es) (action es)
+{-# INLINE dynamicWind #-}
+
+-- | Lifted version of 'Control.Exception.mask'.
+mask :: IOE :> es => ((∀ x. Eff es x -> Eff es x) -> Eff es a) -> Eff es a
+mask f = Eff \es -> Ctl.mask \unmask -> unEff (f \(Eff m) -> Eff \es' -> unmask (m es')) es
+{-# INLINE mask #-}
+
+-- | Lifted version of 'Control.Exception.uninterruptibleMask'.
+uninterruptibleMask :: IOE :> es => ((∀ x. Eff es x -> Eff es x) -> Eff es a) -> Eff es a
+uninterruptibleMask f = Eff \es -> Ctl.uninterruptibleMask \unmask -> unEff (f \(Eff m) -> Eff \es' -> unmask (m es')) es
+{-# INLINE uninterruptibleMask #-}
+
+-- | Lifted version of 'Control.Exception.interruptible'.
+interruptible :: IOE :> es => Eff es a -> Eff es a
+interruptible (Eff m) = Eff \es -> Ctl.interruptible (m es)
+{-# INLINE interruptible #-}

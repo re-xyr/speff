@@ -22,9 +22,9 @@ module Sp.Util
   , runState
     -- * Error
   , Error (..)
-  , throw
-  , try
-  , catch
+  , throwError
+  , tryError
+  , catchError
   , runError
     -- * Writer
   , Writer (..)
@@ -108,25 +108,25 @@ runState s m = unsafeState s \r -> do
 
 -- | Allows you to throw error values of type @e@ and catching these errors too.
 data Error (e :: Type) :: Effect where
-  Throw :: e -> Error e m a
-  Try :: m a -> Error e m (Either e a)
+  ThrowError :: e -> Error e m a
+  TryError :: m a -> Error e m (Either e a)
 
 -- | Throw an error.
-throw :: Error e :> es => e -> Eff es a
-throw e = send (Throw e)
+throwError :: Error e :> es => e -> Eff es a
+throwError e = send (ThrowError e)
 
 -- | Catch any error thrown by a computation and return the result as an 'Either'.
-try :: Error e :> es => Eff es a -> Eff es (Either e a)
-try m = send (Try m)
+tryError :: Error e :> es => Eff es a -> Eff es (Either e a)
+tryError m = send (TryError m)
 
 -- | Catch any error thrown by a computation and handle it with a function.
-catch :: Error e :> es => Eff es a -> (e -> Eff es a) -> Eff es a
-catch m h = try m >>= either h pure
+catchError :: Error e :> es => Eff es a -> (e -> Eff es a) -> Eff es a
+catchError m h = tryError m >>= either h pure
 
 handleError :: ∀ e es a. Handler (Error e) es (Either e a)
 handleError tag = \case
-  Throw e -> abort tag (pure $ Left e)
-  Try m   -> interpose (handleError @e) (Right <$> m)
+  ThrowError e -> abort tag (pure $ Left e)
+  TryError m   -> interpose (handleError @e) (Right <$> m)
 
 -- | Run the 'Error' effect. If there is any unhandled error, it is returned as a 'Left'.
 runError :: ∀ e es a. Eff (Error e : es) a -> Eff es (Either e a)

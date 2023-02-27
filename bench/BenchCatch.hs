@@ -14,8 +14,8 @@ import qualified Sp.Util                      as S
 
 programSp :: S.Error () S.:> es => Int -> S.Eff es a
 programSp = \case
-  0 -> S.throw ()
-  n -> S.catch (programSp (n - 1)) \() -> S.throw ()
+  0 -> S.throwError ()
+  n -> S.catchError (programSp (n - 1)) \() -> S.throwError ()
 {-# NOINLINE programSp #-}
 
 catchSp :: Int -> Either () ()

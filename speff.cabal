@@ -83,9 +83,10 @@ library
     -flate-dmd-anal
     -fspec-constr
   exposed-modules:
+    Sp.Eff
+    Sp.Eff.Exception
     Sp.Internal.Env
     Sp.Internal.Monad
-    Sp.Eff
     Sp.Util
   other-modules:
     Sp.Internal.Handle
