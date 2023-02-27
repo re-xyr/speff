@@ -94,7 +94,7 @@ library
     cpp-options:    -DSPEFF_NATIVE_DELCONT
     other-modules:  Sp.Internal.Ctl.Native
   else
-    other-modules:  Sp.Internal.Ctl.Monad
+    other-modules:  Sp.Internal.Ctl.Monadic
 
 benchmark speff-bench
   import:          lang, dump

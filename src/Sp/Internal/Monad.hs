@@ -29,20 +29,25 @@ module Sp.Internal.Monad
   , runIOE
   ) where
 
+#ifdef SPEFF_NATIVE_DELCONT
+#define CTL_FLAVOR Sp.Internal.Ctl.Native
+#else
+#define CTL_MODULE Sp.Internal.Ctl.Monadic
+#endif
+
 import           Control.Monad          (ap, liftM)
 import           Control.Monad.Catch    (MonadCatch, MonadThrow)
 import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
+import           CTL_MODULE             (Ctl, runCtl)
+import qualified CTL_MODULE             as Ctl
 import           Data.IORef             (IORef, newIORef)
 import           Data.Kind              (Type)
-#ifdef SPEFF_NATIVE_DELCONT
-import           Sp.Internal.Ctl.Native
-#else
-import           Sp.Internal.Ctl.Monad
-#endif
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
 import           System.IO.Unsafe       (unsafePerformIO)
+
+#undef CTL_MODULE
 
 -- | The kind of higher-order effects, parameterized by (1) the monad in which it was performed, and (2) the result
 -- type.
@@ -79,7 +84,7 @@ instance Monad (Eff es) where
 
 -- | The tag associated to a handler that was /introduced/ in context @es@ over an computation with
 -- /eventual result type/ @r@. Value of this type enables delimited control and scoped effects.
-data HandleTag (tag :: Type) (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Marker r)
+data HandleTag (tag :: Type) (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Ctl.Marker r)
 
 -- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
 type Handler e es r = ∀ tag esSend a. e :> esSend => HandleTag tag es r -> e (Eff esSend) a -> Eff (Localized tag : esSend) a
@@ -96,12 +101,12 @@ unsafeIO m = Eff (const $ liftIO m)
 unsafeState :: s -> (IORef s -> Eff es a) -> Eff es a
 unsafeState x0 f = Eff \es -> do
   ref <- liftIO $ newIORef x0
-  promptState ref $ unEff (f ref) es
+  Ctl.promptState ref $ unEff (f ref) es
 {-# INLINE unsafeState #-}
 
 -- | Convert an effect handler into an internal representation with respect to a certain effect context and prompt
 -- frame.
-toInternalHandler :: ∀ e es r. Marker r -> Env es -> Handler e es r -> InternalHandler e
+toInternalHandler :: ∀ e es r. Ctl.Marker r -> Env es -> Handler e es r -> InternalHandler e
 toInternalHandler mark es hdl = InternalHandler \e -> alter Rec.pad $ hdl (HandleTag @() es mark) e
 
 -- | Do a trivial transformation over the effect context.
@@ -112,8 +117,8 @@ alter f = \(Eff m) -> Eff \es -> m $! f es
 -- frame, and then supply the internal handler to the given function to let it add that to the effect context.
 handle :: (InternalHandler e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
 handle f = \hdl (Eff m) -> Eff \es -> do
-  mark <- freshMarker
-  prompt mark $ m $! f (toInternalHandler mark es hdl) es
+  mark <- Ctl.freshMarker
+  Ctl.prompt mark $ m $! f (toInternalHandler mark es hdl) es
 
 -- | Perform an effect operation.
 send :: e :> es => e (Eff es) a -> Eff es a
@@ -142,7 +147,7 @@ withUnembed (HandleTag es _) f =
 
 -- | Abort with a result value.
 abort :: Localized tag :> esSend => HandleTag tag es r -> Eff es r -> Eff esSend a
-abort (HandleTag es mark) (Eff m) = Eff \_ -> raise mark $ m es
+abort (HandleTag es mark) (Eff m) = Eff \_ -> Ctl.abort mark $ m es
 {-# INLINE abort #-}
 
 -- | Capture and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
@@ -152,7 +157,7 @@ control
   -> (∀ tag'. (Eff esSend a -> Eff (Localized tag' : es) r) -> Eff (Localized tag' : es) r)
   -> Eff esSend a
 control (HandleTag es mark) f =
-  Eff \esSend -> yield mark \cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.pad es
+  Eff \esSend -> Ctl.control mark \cont -> unEff (f \(Eff x) -> Eff \_ -> cont $ x esSend) $! Rec.pad es
 {-# INLINE control #-}
 
 -- | Unwrap the 'Eff' monad.

@@ -8,20 +8,18 @@
 -- Delimited control monad based on the design of Xie et al. This implementation imposes much less cost (albeit still
 -- noticeable) on computations not utilizing delimited control than the naive implementation. It also doesn't rely on
 -- compiler-supplied primitive operations.
-module Sp.Internal.Ctl.Monad
+module Sp.Internal.Ctl.Monadic
   ( Marker
   , Ctl
   , freshMarker
   , prompt
-  , yield
-  , raise
+  , control
+  , abort
   , promptState
   , runCtl
   , dynamicWind
   , mask
-  , mask_
   , uninterruptibleMask
-  , uninterruptibleMask_
   , interruptible
   ) where
 
@@ -65,17 +63,17 @@ type role Result representational
 data Result (a :: Type)
   = Pure a
   -- ^ The computation returned normally.
-  | ∀ (r :: Type). Raise !(Marker r) (Ctl r)
+  | ∀ (r :: Type). Abort !(Marker r) (Ctl r)
   -- ^ The computation replaced itself with another computation.
-  | ∀ (r :: Type) (b :: Type). Yield !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
+  | ∀ (r :: Type) (b :: Type). Control !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
   -- ^ The computation captured a resumption and gained control over it. Specifically, this uses @shift0@ semantics.
 
 -- | Extend the captured continuation with a function, if it exists.
 extend :: (Ctl a -> Ctl a) -> Result a -> Result a
 extend f = \case
-  Pure a              -> Pure a
-  Raise mark r        -> Raise mark r
-  Yield mark ctl cont -> Yield mark ctl (f . cont)
+  Pure a                -> Pure a
+  Abort mark r          -> Abort mark r
+  Control mark ctl cont -> Control mark ctl (f . cont)
 
 -- | The delimited control monad, with efficient support of tail-resumptive computations.
 type role Ctl representational
@@ -90,9 +88,9 @@ instance Applicative Ctl where
 
 instance Monad Ctl where
   (Ctl x) >>= f = Ctl $ x >>= \case
-    Pure a              -> unCtl (f a)
-    Raise mark r        -> pure $ Raise mark r
-    Yield mark ctl cont -> pure $ Yield mark ctl (f `compose` cont)
+    Pure a                -> unCtl (f a)
+    Abort mark r          -> pure $ Abort mark r
+    Control mark ctl cont -> pure $ Control mark ctl (f `compose` cont)
 
 -- | This loopbreaker is crucial to the performance of the monad.
 compose :: (b -> Ctl c) -> (a -> Ctl b) -> a -> Ctl c
@@ -107,38 +105,38 @@ liftMap f (Ctl m) = Ctl $ extend (liftMap f) <$> f m
 prompt :: Marker a -> Ctl a -> Ctl a
 prompt !mark (Ctl m) = Ctl $ m >>= \case
   Pure a -> pure $ Pure a
-  Raise mark' r -> case eqMarker mark mark' of
+  Abort mark' r -> case eqMarker mark mark' of
     Just Refl -> unCtl r
-    Nothing   -> pure $ Raise mark' r
-  Yield mark' ctl cont -> case eqMarker mark mark' of
+    Nothing   -> pure $ Abort mark' r
+  Control mark' ctl cont -> case eqMarker mark mark' of
     Just Refl -> unCtl $ ctl (prompt mark . cont)
-    Nothing   -> pure $ Yield mark' ctl (prompt mark . cont)
+    Nothing   -> pure $ Control mark' ctl (prompt mark . cont)
 
 -- | Capture the resumption up to and including the prompt frame specified by the 'Marker'.
-yield :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
-yield !mark f = Ctl $ pure $ Yield mark f id
+control :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
+control !mark f = Ctl $ pure $ Control mark f id
 
 -- | Replace the current computation up to and including the prompt with a new one.
-raise :: Marker r -> Ctl r -> Ctl a
-raise !mark r = Ctl $ pure $ Raise mark r
+abort :: Marker r -> Ctl r -> Ctl a
+abort !mark r = Ctl $ pure $ Abort mark r
 
 -- | Introduce a mutable state that behaves well wrt reentry.
 promptState :: IORef s -> Ctl r -> Ctl r
 promptState !ref (Ctl m) = Ctl $ m >>= \case
   Pure x -> pure $ Pure x
-  Raise mark x -> pure $ Raise mark x
-  Yield mark ctl cont -> do
+  Abort mark x -> pure $ Abort mark x
+  Control mark ctl cont -> do
     s0 <- liftIO (readIORef ref)
-    pure $ Yield mark ctl \x -> do
+    pure $ Control mark ctl \x -> do
       liftIO (writeIORef ref s0)
       promptState ref (cont x)
 
 -- | Unwrap the 'Ctl' monad.
 runCtl :: Ctl a -> IO a
 runCtl (Ctl m) = m >>= \case
-  Pure a   -> pure a
-  Raise {} -> error "Sp.Ctl: Unhandled raise operation. Forgot to pair it with a prompt?"
-  Yield {} -> error "Sp.Ctl: Unhandled yield operation. Forgot to pair it with a prompt?"
+  Pure a     -> pure a
+  Abort {}   -> error "Sp.Ctl: Unhandled abort operation. Forgot to pair it with a prompt?"
+  Control {} -> error "Sp.Ctl: Unhandled control operation. Forgot to pair it with a prompt?"
 
 instance MonadIO Ctl where
   liftIO = Ctl . fmap Pure
@@ -174,20 +172,12 @@ mask io = liftIO getMaskingState >>= \case
   MaskedInterruptible   -> io block
   MaskedUninterruptible -> io blockUninterruptible
 
--- | Lifted version of 'Exception.mask_'.
-mask_ :: Ctl a -> Ctl a
-mask_ io = mask (\_ -> io)
-
 -- | Lifted version of 'Exception.uninterruptibleMask'.
 uninterruptibleMask :: ((∀ x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
 uninterruptibleMask io = liftIO getMaskingState >>= \case
   Unmasked              -> blockUninterruptible $ io unblock
   MaskedInterruptible   -> blockUninterruptible $ io block
   MaskedUninterruptible -> io blockUninterruptible
-
--- | Lifted version of 'Exception.uninterruptibleMask_'.
-uninterruptibleMask_ :: Ctl a -> Ctl a
-uninterruptibleMask_ io = uninterruptibleMask (\_ -> io)
 
 -- | Lifted version of 'Exception.interruptible'.
 interruptible :: Ctl a -> Ctl a

@@ -16,15 +16,13 @@ module Sp.Internal.Ctl.Native
   , Ctl
   , freshMarker
   , prompt
-  , yield
-  , raise
+  , control
+  , abort
   , promptState
   , runCtl
   , dynamicWind
   , mask
-  , mask_
   , uninterruptibleMask
-  , uninterruptibleMask_
   , interruptible
   ) where
 
@@ -118,7 +116,7 @@ data Result a
 -- | Unwinding of a 'Ctl' computation.
 data Unwind a
   = ∀ (r :: Type) (b :: Type).
-    Capture !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
+    Control !(Marker r) ((Ctl b -> Ctl r) -> Ctl r) (Ctl b -> Ctl a)
   | ∀ (r :: Type).
     Abort !(Marker r) (Ctl r)
 
@@ -152,7 +150,7 @@ unwind :: Unwind r -> Ctl a
 unwind x = Ctl $ Exception.throwIO $ UnwindException $ unsafeCoerce $ x
 {-# INLINE unwind #-}
 
--- | Unwind-with-current-continuation. Useful when the unwind is a capture.
+-- | Unwind-with-current-continuation. Useful when the unwind is a control.
 unwindCC :: (∀ r. (Ctl a -> Ctl r) -> Unwind r) -> Ctl a
 unwindCC f = Ctl $ control0IO \cont -> runCtl $ unwind $ f (Ctl . cont . runCtl)
 {-# INLINE unwindCC #-}
@@ -162,26 +160,26 @@ prompt :: Marker a -> Ctl a -> Ctl a
 prompt !mark m = handle m \case
   Abort mark' r -> case eqMarker mark mark' of
     Just Refl -> r
-    Nothing   -> raise mark' r
-  Capture mark' ctl cont -> case eqMarker mark mark' of
+    Nothing   -> abort mark' r
+  Control mark' ctl cont -> case eqMarker mark mark' of
     Just Refl -> ctl (prompt mark . cont)
-    Nothing   -> unwindCC \cont' -> Capture mark' ctl (cont' . prompt mark . cont)
+    Nothing   -> unwindCC \cont' -> Control mark' ctl (cont' . prompt mark . cont)
 
 -- | Take over control of the continuation up to the prompt frame specified by 'Marker'.
-yield :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
-yield !mark ctl = unwindCC \cont -> Capture mark ctl cont
+control :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
+control !mark ctl = unwindCC \cont -> Control mark ctl cont
 
 -- | Aborts the computation with a value to the prompt frame specified by 'Marker'.
-raise :: Marker r -> Ctl r -> Ctl a
-raise !mark r = unwind $ Abort mark r
+abort :: Marker r -> Ctl r -> Ctl a
+abort !mark r = unwind $ Abort mark r
 
 -- | Set up backtracking on a specific state variable. This is unsafe.
 promptState :: IORef s -> Ctl a -> Ctl a
 promptState !ref m = handle m \case
-  Abort mark r -> raise mark r
-  Capture mark ctl cont -> do
+  Abort mark r -> abort mark r
+  Control mark ctl cont -> do
     s0 <- liftIO $ readIORef ref
-    unwindCC \cont' -> Capture mark ctl \x -> cont' do
+    unwindCC \cont' -> Control mark ctl \x -> cont' do
       liftIO $ writeIORef ref s0
       promptState ref (cont x)
 
@@ -197,7 +195,7 @@ instance MonadCatch Ctl where
         Just e  -> runCtl $ h e
         Nothing -> Exception.throwIO se
 
--- | Attach pre- and post-actions that are well-behaved in the presence of captures. The downside is that it doesn't
+-- | Attach pre- and post-actions that are well-behaved in the presence of controls. The downside is that it doesn't
 -- support passing the pre-action's result to the main action.
 dynamicWind :: Ctl () -> Ctl () -> Ctl a -> Ctl a
 dynamicWind before after action =
@@ -205,25 +203,17 @@ dynamicWind before after action =
     Finished a -> pure a
     Raised se -> throwM se
     Unwound y -> case y of
-      Abort mark r -> raise mark r
-      Capture mark ctl cont -> unwindCC \cont' ->
-        Capture mark ctl (cont' . dynamicWind before after . cont)
+      Abort mark r -> abort mark r
+      Control mark ctl cont -> unwindCC \cont' ->
+        Control mark ctl (cont' . dynamicWind before after . cont)
 
 -- | Lifted version of 'Exception.mask'.
 mask :: ((∀ x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
 mask io = Ctl $ Exception.mask \unmask -> runCtl $ io (Ctl . unmask . runCtl)
 
--- | Lifted version of 'Exception.mask_'.
-mask_ :: Ctl a -> Ctl a
-mask_ io = Ctl $ Exception.mask_ $ runCtl io
-
 -- | Lifted version of 'Exception.uninterruptibleMask'.
 uninterruptibleMask :: ((∀ x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a
 uninterruptibleMask io = Ctl $ Exception.uninterruptibleMask \unmask -> runCtl $ io (Ctl . unmask . runCtl)
-
--- | Lifted version of 'Exception.uninterruptibleMask_'.
-uninterruptibleMask_ :: Ctl a -> Ctl a
-uninterruptibleMask_ io = Ctl $ Exception.uninterruptibleMask_ $ runCtl io
 
 -- | Lifted version of 'Exception.interruptible'.
 interruptible :: Ctl a -> Ctl a
