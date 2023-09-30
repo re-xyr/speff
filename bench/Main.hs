@@ -13,8 +13,10 @@ main = defaultMain
   [ bgroup "countdown" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp.shallow" $ nf countdownSp x
     , bench "sp.deep" $ nf countdownSpDeep x
+#if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf countdownEffectful x
     , bench "effectful.deep" $ nf countdownEffectfulDeep x
+#endif
     , bench "ev.shallow" $ nf countdownEv x
     , bench "ev.deep" $ nf countdownEvDeep x
 #if SPEFF_BENCH_FREER_SIMPLE
@@ -45,8 +47,10 @@ main = defaultMain
   , bgroup "catch" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp.shallow" $ nf catchSp x
     , bench "sp.deep" $ nf catchSpDeep x
+#if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf catchEffectful x
     , bench "effectful.deep" $ nf catchEffectfulDeep x
+#endif
     , bench "fused.shallow" $ nf catchFused x
     , bench "fused.deep" $ nf catchFusedDeep x
     , bench "sem.shallow" $ nf catchSem x
@@ -55,8 +59,10 @@ main = defaultMain
   , bgroup "local" $ [10000] <&> \x -> bgroup (show x)
     [ bench "sp.shallow" $ nf localSp x
     , bench "sp.deep" $ nf localSpDeep x
+#if SPEFF_BENCH_EFFECTFUL
     , bench "effectful.shallow" $ nf localEffectful x
     , bench "effectful.deep" $ nf localEffectfulDeep x
+#endif
     , bench "fused.shallow" $ nf localFused x
     , bench "fused.deep" $ nf localFusedDeep x
     , bench "sem.shallow" $ nf localSem x

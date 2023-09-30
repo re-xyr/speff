@@ -35,7 +35,7 @@ module Sp.Internal.Monad
   ) where
 
 #ifdef SPEFF_NATIVE_DELCONT
-#define CTL_FLAVOR Sp.Internal.Ctl.Native
+#define CTL_MODULE Sp.Internal.Ctl.Native
 #else
 #define CTL_MODULE Sp.Internal.Ctl.Monadic
 #endif

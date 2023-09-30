@@ -8,7 +8,7 @@ license:      BSD-3-Clause
 copyright:    2022 Xy Ren
 homepage:     https://github.com/re-xyr/speff
 bug-reports:  https://github.com/re-xyr/speff/issues
-tested-with:  GHC == {9.4.4, 9.2.5, 9.0.2, 8.10.7, 8.8.4}
+tested-with:  GHC == {9.6.3, 9.4.7, 9.2.8, 9.0.2, 8.10.7, 8.8.4, 8.6.5}
 category:     Control, Effect, Language
 synopsis:     Efficient higher-order effect handlers
 
@@ -107,15 +107,16 @@ benchmark speff-bench
     -with-rtsopts=-T
   build-depends:
     speff,
-    effectful-core  == 2.2.2.1,
-    eveff           == 1.0.0.2,
-    fused-effects   == 1.1.2.1,
-    mtl             == 2.2.2,
-    polysemy        == 1.9.0.0,
+    eveff          ^>= 1.0,
+    freer-simple   ^>= 1.2,
+    fused-effects  ^>= 1.1,
+    mtl            ^>= 2.2 || ^>= 2.3,
+    polysemy       ^>= 1.9,
     tasty-bench    ^>= 0.3,
-  if impl(ghc < 9.6)
-    cpp-options:    -DSPEFF_BENCH_FREER_SIMPLE
-    build-depends:  freer-simple == 1.2.1.2
+  cpp-options: -DSPEFF_BENCH_FREER_SIMPLE
+  if impl(ghc >= 8.8)
+    cpp-options:    -DSPEFF_BENCH_EFFECTFUL
+    build-depends:  effectful-core ^>= 2.3
   other-modules:
     BenchCatch
     BenchCountdown

@@ -1,11 +1,14 @@
+{-# LANGUAGE CPP #-}
 -- Benchmarking scoped effects #1: Catching errors
 module BenchCatch where
 
 import qualified Control.Carrier.Error.Either as F
 import qualified Control.Carrier.Reader       as F
+#if SPEFF_BENCH_EFFECTFUL
 import qualified Effectful                    as EL
 import qualified Effectful.Error.Dynamic      as EL
 import qualified Effectful.Reader.Dynamic     as EL
+#endif
 import qualified Polysemy                     as P
 import qualified Polysemy.Error               as P
 import qualified Polysemy.Reader              as P
@@ -25,6 +28,7 @@ catchSpDeep :: Int -> Either () ()
 catchSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runError $ run $ run $ run $ run $ run $ programSp n
   where run = S.runReader ()
 
+#if SPEFF_BENCH_EFFECTFUL
 programEffectful :: EL.Error () EL.:> es => Int -> EL.Eff es a
 programEffectful = \case
   0 -> EL.throwError ()
@@ -38,6 +42,7 @@ catchEffectfulDeep :: Int -> Either (EL.CallStack, ()) ()
 catchEffectfulDeep n =
   EL.runPureEff $ run $ run $ run $ run $ run $ EL.runError $ run $ run $ run $ run $ run $ programEffectful n
   where run = EL.runReader ()
+#endif
 
 programFused :: F.Has (F.Error ()) sig m => Int -> m a
 programFused = \case

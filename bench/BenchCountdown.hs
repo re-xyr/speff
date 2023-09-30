@@ -14,9 +14,11 @@ import qualified Control.Monad.Freer.State    as FS
 import qualified Control.Monad.Identity       as M
 import qualified Control.Monad.Reader         as M
 import qualified Control.Monad.State.Strict   as M
+#if SPEFF_BENCH_EFFECTFUL
 import qualified Effectful                    as EL
 import qualified Effectful.Reader.Dynamic     as EL
 import qualified Effectful.State.Dynamic      as EL
+#endif
 import qualified Polysemy                     as P
 import qualified Polysemy.Reader              as P
 import qualified Polysemy.State               as P
@@ -40,6 +42,7 @@ countdownSpDeep :: Int -> (Int, Int)
 countdownSpDeep n = S.runEff $ runR $ runR $ runR $ runR $ runR $ S.runState n $ runR $ runR $ runR $ runR $ runR $ programSp
   where runR = S.runReader ()
 
+#if SPEFF_BENCH_EFFECTFUL
 programEffectful :: EL.State Int EL.:> es => EL.Eff es Int
 programEffectful = do
   x <- EL.get @Int
@@ -57,6 +60,7 @@ countdownEffectfulDeep :: Int -> (Int, Int)
 countdownEffectfulDeep n =
   EL.runPureEff $ runR $ runR $ runR $ runR $ runR $ EL.runStateLocal n $ runR $ runR $ runR $ runR $ runR $ programEffectful
   where runR = EL.runReader ()
+#endif
 
 programEv :: E.State Int E.:? es => E.Eff es Int
 programEv = do

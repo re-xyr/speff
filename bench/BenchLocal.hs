@@ -1,10 +1,13 @@
+{-# LANGUAGE CPP #-}
 -- Benchmarking scoped effects #2: Local environments
 module BenchLocal where
 
 import qualified Control.Carrier.Error.Either as F
 import qualified Control.Carrier.Reader       as F
+#if SPEFF_BENCH_EFFECTFUL
 import qualified Effectful                    as EL
 import qualified Effectful.Reader.Dynamic     as EL
+#endif
 import qualified Polysemy                     as P
 import qualified Polysemy.Reader              as P
 import qualified Sp.Eff                       as S
@@ -23,6 +26,7 @@ localSpDeep :: Int -> Int
 localSpDeep n = S.runEff $ run $ run $ run $ run $ run $ S.runReader @Int 0 $ run $ run $ run $ run $ run $ programSp n
   where run = S.runReader ()
 
+#if SPEFF_BENCH_EFFECTFUL
 programEffectful :: EL.Reader Int EL.:> es => Int -> EL.Eff es Int
 programEffectful = \case
   0 -> EL.ask
@@ -36,6 +40,7 @@ localEffectfulDeep :: Int -> Int
 localEffectfulDeep n =
   EL.runPureEff $ run $ run $ run $ run $ run $ EL.runReader @Int 0 $ run $ run $ run $ run $ run $ programEffectful n
   where run = EL.runReader ()
+#endif
 
 programFused :: F.Has (F.Reader Int) sig m => Int -> m Int
 programFused = \case
