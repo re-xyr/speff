@@ -1,42 +1,46 @@
-cabal-version: 3.0
-
-name:         speff
-version:      0.1.0.0
-author:       Xy Ren
-maintainer:   xy.r@outlook.com
-license:      BSD-3-Clause
-copyright:    2022 Xy Ren
-homepage:     https://github.com/re-xyr/speff
-bug-reports:  https://github.com/re-xyr/speff/issues
-tested-with:  GHC == {9.6.3, 9.4.7, 9.2.8, 9.0.2, 8.10.7, 8.8.4, 8.6.5}
-category:     Control, Effect, Language
-synopsis:     Efficient higher-order effect handlers
-
-license-file:        LICENSE
-extra-source-files:  README.md
+cabal-version:      3.0
+name:               speff
+version:            0.1.0.0
+author:             Xy Ren
+maintainer:         xy.r@outlook.com
+license:            BSD-3-Clause
+copyright:          2022 Xy Ren
+homepage:           https://github.com/re-xyr/speff
+bug-reports:        https://github.com/re-xyr/speff/issues
+category:           Control, Effect, Language
+synopsis:           Efficient higher-order effect handlers
+license-file:       LICENSE
+extra-source-files: README.md
+tested-with:
+  GHC ==8.6.5
+   || ==8.8.4
+   || ==8.10.7
+   || ==9.0.2
+   || ==9.2.8
+   || ==9.4.8
+   || ==9.6.3
+   || ==9.8.1
 
 source-repository head
-  type:      git
-  location:  https://github.com/re-xyr/speff
+  type:     git
+  location: https://github.com/re-xyr/speff
 
 common lang
-  default-language: Haskell2010
+  default-language:   Haskell2010
   build-depends:
-    base         >= 4.12 && < 4.19,
-    exceptions  ^>= 0.10,
-    primitive   ^>= 0.8,
+    , base        >=4.12  && <4.20
+    , exceptions  ^>=0.10
+    , primitive   >=0.8   && <0.10
+
   ghc-options:
-    -Wall
-    -Widentities
-    -Wincomplete-record-updates
-    -Wincomplete-uni-patterns
-    -Wmissing-deriving-strategies
-    -Wno-unticked-promoted-constructors
-    -Wpartial-fields
-    -Wunused-type-patterns
+    -Wall -Widentities -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wno-unticked-promoted-constructors
+    -Wpartial-fields -Wunused-type-patterns
+
   default-extensions:
-    BlockArguments
+    NoStarIsType
     BangPatterns
+    BlockArguments
     ConstraintKinds
     DataKinds
     DeriveAnyClass
@@ -48,7 +52,6 @@ common lang
     GADTs
     LambdaCase
     MagicHash
-    NoStarIsType
     PolyKinds
     RankNTypes
     RoleAnnotations
@@ -63,60 +66,65 @@ common lang
 
 common dump
   ghc-options:
-    -ddump-simpl
-    -ddump-to-file
-    -dsuppress-all
-    -dsuppress-uniques
+    -ddump-simpl -ddump-to-file -dsuppress-all -dsuppress-uniques
+    -ddump-hi
 
 flag native-delcont
   description:
     Build with native delimited continuation support from GHC 9.6+. This makes non-scoped tail-resumptive operations
     faster, but also makes scoped operations and (especially) operations that manipulate the control flow slower.
-  default:  False
-  manual:   True
+
+  default:     False
+  manual:      True
 
 library
   import:          lang, dump
   hs-source-dirs:  src
-  ghc-options:
-    -fdicts-strict
-    -flate-dmd-anal
-    -fspec-constr
+  ghc-options:     -fdicts-strict -flate-dmd-anal -fspec-constr
   exposed-modules:
     Sp.Eff
     Sp.Eff.Exception
+    Sp.Error
     Sp.Internal.Env
     Sp.Internal.Monad
     Sp.Util
+    Sp.NonDet
+    Sp.Reader
+    Sp.State
+    Sp.Writer
+
   other-modules:
     Sp.Internal.Handle
     Sp.Internal.Vec
+
   if flag(native-delcont)
-    cpp-options:    -DSPEFF_NATIVE_DELCONT
-    other-modules:  Sp.Internal.Ctl.Native
+    cpp-options:   -DSPEFF_NATIVE_DELCONT
+    other-modules: Sp.Internal.Ctl.Native
+
   else
-    other-modules:  Sp.Internal.Ctl.Monadic
+    other-modules: Sp.Internal.Ctl.Monadic
 
 benchmark speff-bench
-  import:          lang, dump
-  type:            exitcode-stdio-1.0
-  hs-source-dirs:  bench
-  main-is:         Main.hs
-  ghc-options:
-    -rtsopts
-    -with-rtsopts=-T
+  import:         lang, dump
+  type:           exitcode-stdio-1.0
+  hs-source-dirs: bench
+  main-is:        Main.hs
+  ghc-options:    -rtsopts -with-rtsopts=-T
   build-depends:
-    speff,
-    eveff          ^>= 1.0,
-    freer-simple   ^>= 1.2,
-    fused-effects  ^>= 1.1,
-    mtl            ^>= 2.2 || ^>= 2.3,
-    polysemy       ^>= 1.9,
-    tasty-bench    ^>= 0.3,
-  cpp-options: -DSPEFF_BENCH_FREER_SIMPLE
-  if impl(ghc >= 8.8)
-    cpp-options:    -DSPEFF_BENCH_EFFECTFUL
-    build-depends:  effectful-core ^>= 2.3
+    , eveff          ^>=1.0
+    , freer-simple   ^>=1.2
+    , fused-effects  ^>=1.1
+    , mtl            >=2.2  && <2.4
+    , polysemy       ^>=1.9
+    , speff
+    , tasty-bench    ^>=0.3
+
+  cpp-options:    -DSPEFF_BENCH_FREER_SIMPLE
+
+  if impl(ghc >=8.8)
+    cpp-options:   -DSPEFF_BENCH_EFFECTFUL
+    build-depends: effectful-core ^>=2.3
+
   other-modules:
     BenchCatch
     BenchCountdown

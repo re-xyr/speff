@@ -17,7 +17,8 @@ import qualified Polysemy                      as P
 import qualified Polysemy.NonDet               as P
 import qualified Polysemy.Reader               as P
 import qualified Sp.Eff                        as S
-import qualified Sp.Util                       as S
+import qualified Sp.NonDet                     as S
+import qualified Sp.Reader                     as S
 
 programSp :: (S.NonDet S.:> e) => Int -> S.Eff e (Int, Int, Int)
 programSp upbound = do

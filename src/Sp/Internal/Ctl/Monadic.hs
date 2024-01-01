@@ -98,19 +98,25 @@ compose = (<=<)
 {-# NOINLINE compose #-}
 
 -- | Lift an 'IO' function to a 'Ctl' function. The function must not alter the result.
-liftMap :: (IO (Result a) -> IO (Result a)) -> Ctl a -> Ctl a
-liftMap f (Ctl m) = Ctl $ extend (liftMap f) <$> f m
+liftMap, liftMap' :: (IO (Result a) -> IO (Result a)) -> Ctl a -> Ctl a
+liftMap f (Ctl m) = Ctl $ extend (liftMap' f) <$> f m
+{-# INLINE liftMap #-}
+liftMap' = liftMap
+{-# NOINLINE liftMap' #-}
 
 -- | Install a prompt frame.
-prompt :: Marker a -> Ctl a -> Ctl a
+prompt, prompt' :: Marker a -> Ctl a -> Ctl a
 prompt !mark (Ctl m) = Ctl $ m >>= \case
   Pure a -> pure $ Pure a
   Abort mark' r -> case eqMarker mark mark' of
     Just Refl -> unCtl r
     Nothing   -> pure $ Abort mark' r
   Control mark' ctl cont -> case eqMarker mark mark' of
-    Just Refl -> unCtl $ ctl (prompt mark . cont)
-    Nothing   -> pure $ Control mark' ctl (prompt mark . cont)
+    Just Refl -> unCtl $ ctl (prompt' mark . cont)
+    Nothing   -> pure $ Control mark' ctl (prompt' mark . cont)
+{-# INLINE prompt #-}
+prompt' = prompt
+{-# NOINLINE prompt' #-}
 
 -- | Capture the resumption up to and including the prompt frame specified by the 'Marker'.
 control :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
@@ -121,7 +127,7 @@ abort :: Marker r -> Ctl r -> Ctl a
 abort !mark r = Ctl $ pure $ Abort mark r
 
 -- | Introduce a mutable state that behaves well wrt reentry.
-promptState :: IORef s -> Ctl r -> Ctl r
+promptState, promptState' :: IORef s -> Ctl r -> Ctl r
 promptState !ref (Ctl m) = Ctl $ m >>= \case
   Pure x -> pure $ Pure x
   Abort mark x -> pure $ Abort mark x
@@ -129,7 +135,10 @@ promptState !ref (Ctl m) = Ctl $ m >>= \case
     s0 <- liftIO (readIORef ref)
     pure $ Control mark ctl \x -> do
       liftIO (writeIORef ref s0)
-      promptState ref (cont x)
+      promptState' ref (cont x)
+{-# INLINE promptState #-}
+promptState' = promptState
+{-# NOINLINE promptState' #-}
 
 -- | Unwrap the 'Ctl' monad.
 runCtl :: Ctl a -> IO a
@@ -151,14 +160,17 @@ instance MonadCatch Ctl where
 
 -- | Install pre- and post-actions that are well-behaved wrt reentry. Specifically, pre- and post-actions are always
 -- guaranteed to act in pairs.
-dynamicWind :: Ctl () -> Ctl () -> Ctl a -> Ctl a
+dynamicWind, dynamicWind' :: Ctl () -> Ctl () -> Ctl a -> Ctl a
 dynamicWind before after (Ctl action) = do
   res <- before >> Ctl do
     res <- Exception.try @SomeException action
     pure $ Pure res
   after >> Ctl case res of
     Left se -> Exception.throwIO se
-    Right y -> pure $ extend (dynamicWind before after) y
+    Right y -> pure $ extend (dynamicWind' before after) y
+{-# INLINE dynamicWind #-}
+dynamicWind' = dynamicWind
+{-# NOINLINE dynamicWind' #-}
 
 block, unblock, blockUninterruptible :: Ctl a -> Ctl a
 block = liftMap \(IO m) -> IO $ maskAsyncExceptions# m

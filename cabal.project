@@ -7,3 +7,6 @@ package *
 
 if impl(ghc >= 9.4)
   allow-newer: freer-simple:template-haskell
+
+if impl(ghc >= 9.8)
+  allow-newer: base

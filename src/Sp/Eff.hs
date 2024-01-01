@@ -40,6 +40,14 @@ module Sp.Eff
   , interpose2
   , interpose3
   , interposeN
+    -- *** Replace
+  , Replace
+  , replace
+  , replace0
+  , replace1
+  , replace2
+  , replace3
+  , replaceN
     -- ** Combinators to use in handlers
   , embed
   , withUnembed

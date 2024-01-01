@@ -13,7 +13,8 @@ import qualified Polysemy                     as P
 import qualified Polysemy.Error               as P
 import qualified Polysemy.Reader              as P
 import qualified Sp.Eff                       as S
-import qualified Sp.Util                      as S
+import qualified Sp.Error                     as S
+import qualified Sp.Reader                    as S
 
 programSp :: S.Error () S.:> es => Int -> S.Eff es a
 programSp = \case

@@ -11,7 +11,7 @@ import qualified Effectful.Reader.Dynamic     as EL
 import qualified Polysemy                     as P
 import qualified Polysemy.Reader              as P
 import qualified Sp.Eff                       as S
-import qualified Sp.Util                      as S
+import qualified Sp.Reader                    as S
 
 programSp :: S.Reader Int S.:> es => Int -> S.Eff es Int
 programSp = \case

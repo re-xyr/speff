@@ -23,7 +23,8 @@ import qualified Polysemy                     as P
 import qualified Polysemy.Reader              as P
 import qualified Polysemy.State               as P
 import qualified Sp.Eff                       as S
-import qualified Sp.Util                      as S
+import qualified Sp.Reader                    as S
+import qualified Sp.State                     as S
 
 programSp :: S.State Int S.:> es => S.Eff es Int
 programSp = do

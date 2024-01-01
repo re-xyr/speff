@@ -24,6 +24,14 @@ module Sp.Internal.Handle
   , interpose2
   , interpose3
   , interposeN
+    -- * Replace
+  , Replace
+  , replace
+  , replace0
+  , replace1
+  , replace2
+  , replace3
+  , replaceN
     -- * Lift
   , Lift
   , lift
@@ -137,6 +145,45 @@ interpose3 = interpose
 interposeN :: ∀ es'. KnownList es' => Interpose es'
 interposeN = handle \ih es -> Rec.update ih $ Rec.drop @es' es
 {-# INLINE interposeN #-}
+
+--------------------------------------------------------------------------------
+-- Replace ---------------------------------------------------------------------
+--------------------------------------------------------------------------------
+
+-- | The family of /interposing/ functions. Modify the implementation of an effect in the stack via a new handler, and
+-- optionally add some other effects (@es'@) that could be used in said handler.
+type Replace es' = ∀ e es a. e :> es => Handler e (es' ++ es) a -> Eff es a -> Eff (es' ++ es) a
+
+-- | Replace and add extra effects based on type inference. If this does not work consider using the more concrete
+-- functions below.
+replace :: (e :> es, Suffix es es') => Handler e es' a -> Eff es a -> Eff es' a
+replace = rehandle \es -> Rec.suffix es
+{-# INLINE replace #-}
+
+-- | Replace and don't add extra effects.
+replace0 :: Replace '[]
+replace0 = replace
+{-# INLINE replace0 #-}
+
+-- | Replace and add 1 extra effect.
+replace1 :: Replace '[e']
+replace1 = replace
+{-# INLINE replace1 #-}
+
+-- | Replace and add 2 extra effects.
+replace2 :: Replace '[e', e'']
+replace2 = replace
+{-# INLINE replace2 #-}
+
+-- | Replace and add 3 extra effects.
+replace3 :: Replace '[e', e'', e''']
+replace3 = replace
+{-# INLINE replace3 #-}
+
+-- | Replace and add a list of extra effects specified explicitly via @TypeApplications@.
+replaceN :: ∀ es'. KnownList es' => Replace es'
+replaceN = rehandle \es -> Rec.drop @es' es
+{-# INLINE replaceN #-}
 
 --------------------------------------------------------------------------------
 -- Lift ------------------------------------------------------------------------

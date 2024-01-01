@@ -11,16 +11,18 @@
 module Sp.Internal.Monad
   ( Eff
   , Env
-  , InternalHandler
+  , HandlerCell
   , Effect
   , HandleTag
   , Handler
   , unsafeIO
   , unsafeState
   , handle
+  , rehandle
   , alter
   , send
   , Localized
+  , Handling
   , embed
   , withUnembed
   , abort
@@ -46,7 +48,7 @@ import qualified Control.Monad.Catch    as Catch
 import           Control.Monad.IO.Class (MonadIO (liftIO))
 import           CTL_MODULE             (Ctl, runCtl)
 import qualified CTL_MODULE             as Ctl
-import           Data.IORef             (IORef, newIORef)
+import           Data.IORef             (IORef, newIORef, readIORef, writeIORef)
 import           Data.Kind              (Type)
 import qualified Sp.Internal.Env        as Rec
 import           Sp.Internal.Env        (Rec, (:>))
@@ -59,7 +61,9 @@ import           System.IO.Unsafe       (unsafePerformIO)
 type Effect = (Type -> Type) -> Type -> Type
 
 -- | The concrete representation of an effect context: a record of internal handler representations.
-type Env = Rec InternalHandler
+type Env = Rec HandlerCell
+
+newtype HandlerCell (e :: Effect) = HandlerCell { getHandlerCell :: IORef (InternalHandler e) }
 
 -- | The effect monad; it is parameterized by the /effect context/, i.e. a row of effects available. This monad is
 -- implemented with evidence passing and a delimited control monad with support of efficient tail-resumptive
@@ -92,7 +96,7 @@ instance Monad (Eff es) where
 data HandleTag (tag :: Type) (es :: [Effect]) (r :: Type) = HandleTag (Env es) !(Ctl.Marker r)
 
 -- | A handler of effect @e@ introduced in context @es@ over a computation returning @r@.
-type Handler e es r = ∀ tag esSend a. e :> esSend => HandleTag tag es r -> e (Eff esSend) a -> Eff (Localized tag : esSend) a
+type Handler e es r = ∀ tag esSend a. e :> esSend => HandleTag tag es r -> e (Eff esSend) a -> Eff (Handling tag : esSend) a
 
 -- | This "unsafe" @IO@ function is perfectly safe in the sense that it won't panic or otherwise cause undefined
 -- behaviors; it is only unsafe when it is used to embed arbitrary @IO@ actions in any effect environment,
@@ -117,32 +121,50 @@ toInternalHandler mark es hdl = InternalHandler \e -> alter Rec.pad $ hdl (Handl
 -- | Do a trivial transformation over the effect context.
 alter :: (Env es' -> Env es) -> Eff es a -> Eff es' a
 alter f = \(Eff m) -> Eff \es -> m $! f es
+{-# INLINE alter #-}
 
 -- | General effect handling. Introduce a prompt frame, convert the supplied handler to an internal one wrt that
 -- frame, and then supply the internal handler to the given function to let it add that to the effect context.
-handle :: (InternalHandler e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
+handle :: (HandlerCell e -> Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
 handle f = \hdl (Eff m) -> Eff \es -> do
   mark <- Ctl.freshMarker
-  Ctl.prompt mark $ m $! f (toInternalHandler mark es hdl) es
+  cell <- liftIO $ newIORef $ toInternalHandler mark es hdl
+  Ctl.prompt mark $ m $! f (HandlerCell cell) es
+{-# INLINE handle #-}
+
+rehandle :: e :> es => (Env es' -> Env es) -> Handler e es' a -> Eff es a -> Eff es' a
+rehandle f = \hdl (Eff m) -> Eff \es -> do
+  mark <- Ctl.freshMarker
+  let es' = f es
+  let cell = getHandlerCell $ Rec.index es'
+  oldHdl <- liftIO $ readIORef cell
+  Ctl.dynamicWind
+    (liftIO $ writeIORef cell $ toInternalHandler mark es hdl)
+    (liftIO $ writeIORef cell oldHdl)
+    (Ctl.prompt mark $ m es')
+{-# INLINE rehandle #-}
 
 -- | Perform an effect operation.
 send :: e :> es => e (Eff es) a -> Eff es a
-send e = Eff \es -> unEff (runHandler (Rec.index es) e) es
+send e = Eff \es -> do
+  ih <- liftIO $ readIORef $ getHandlerCell $ Rec.index es
+  unEff (runHandler ih e) es
 {-# INLINE send #-}
 
 -- | A "localized computaton"; this should be parameterized with an existential variable so the computation with this
 -- effect cannot escape a certain scope.
 data Localized (tag :: Type) :: Effect
+data Handling (tag :: Type) :: Effect
 
 -- | Perform an operation from the handle-site.
-embed :: Localized tag :> esSend => HandleTag tag es r -> Eff es a -> Eff esSend a
+embed :: Handling tag :> esSend => HandleTag tag es r -> Eff es a -> Eff esSend a
 embed (HandleTag es _) (Eff m) = Eff \_ -> m es
 {-# INLINE embed #-}
 
 -- | Perform an operation from the handle-site, while being able to convert an operation from the perform-site to the
 -- handle-site.
 withUnembed
-  :: Localized tag :> esSend
+  :: Handling tag :> esSend
   => HandleTag tag es r
   -> (∀ tag'. (∀ x. Eff esSend x -> Eff (Localized tag' : es) x) -> Eff (Localized tag' : es) a)
   -> Eff esSend a
@@ -151,13 +173,13 @@ withUnembed (HandleTag es _) f =
 {-# INLINE withUnembed #-}
 
 -- | Abort with a result value.
-abort :: Localized tag :> esSend => HandleTag tag es r -> Eff es r -> Eff esSend a
+abort :: Handling tag :> esSend => HandleTag tag es r -> Eff es r -> Eff esSend a
 abort (HandleTag es mark) (Eff m) = Eff \_ -> Ctl.abort mark $ m es
 {-# INLINE abort #-}
 
 -- | Capture and gain control of the resumption. The resumption cannot escape the scope of the controlling function.
 control
-  :: Localized tag :> esSend
+  :: Handling tag :> esSend
   => HandleTag tag es r
   -> (∀ tag'. (Eff esSend a -> Eff (Localized tag' : es) r) -> Eff (Localized tag' : es) r)
   -> Eff esSend a

@@ -156,14 +156,17 @@ unwindCC f = Ctl $ control0IO \cont -> runCtl $ unwind $ f (Ctl . cont . runCtl)
 {-# INLINE unwindCC #-}
 
 -- | Prompt/reset with a specific marker. This is unsafe.
-prompt :: Marker a -> Ctl a -> Ctl a
+prompt, prompt' :: Marker a -> Ctl a -> Ctl a
 prompt !mark m = handle m \case
   Abort mark' r -> case eqMarker mark mark' of
     Just Refl -> r
     Nothing   -> abort mark' r
   Control mark' ctl cont -> case eqMarker mark mark' of
-    Just Refl -> ctl (prompt mark . cont)
-    Nothing   -> unwindCC \cont' -> Control mark' ctl (cont' . prompt mark . cont)
+    Just Refl -> ctl (prompt' mark . cont)
+    Nothing   -> unwindCC \cont' -> Control mark' ctl (cont' . prompt' mark . cont)
+{-# INLINE prompt #-}
+prompt' = prompt
+{-# NOINLINE prompt' #-}
 
 -- | Take over control of the continuation up to the prompt frame specified by 'Marker'.
 control :: Marker r -> ((Ctl a -> Ctl r) -> Ctl r) -> Ctl a
@@ -174,14 +177,17 @@ abort :: Marker r -> Ctl r -> Ctl a
 abort !mark r = unwind $ Abort mark r
 
 -- | Set up backtracking on a specific state variable. This is unsafe.
-promptState :: IORef s -> Ctl a -> Ctl a
+promptState, promptState' :: IORef s -> Ctl a -> Ctl a
 promptState !ref m = handle m \case
   Abort mark r -> abort mark r
   Control mark ctl cont -> do
     s0 <- liftIO $ readIORef ref
     unwindCC \cont' -> Control mark ctl \x -> cont' do
       liftIO $ writeIORef ref s0
-      promptState ref (cont x)
+      promptState' ref (cont x)
+{-# INLINE promptState #-}
+promptState' = promptState
+{-# NOINLINE promptState' #-}
 
 instance MonadThrow Ctl where
   throwM = Ctl . Exception.throwIO
@@ -197,7 +203,7 @@ instance MonadCatch Ctl where
 
 -- | Attach pre- and post-actions that are well-behaved in the presence of controls. The downside is that it doesn't
 -- support passing the pre-action's result to the main action.
-dynamicWind :: Ctl () -> Ctl () -> Ctl a -> Ctl a
+dynamicWind, dynamicWind' :: Ctl () -> Ctl () -> Ctl a -> Ctl a
 dynamicWind before after action =
   before >> handle' action \v -> after >> case v of
     Finished a -> pure a
@@ -205,7 +211,10 @@ dynamicWind before after action =
     Unwound y -> case y of
       Abort mark r -> abort mark r
       Control mark ctl cont -> unwindCC \cont' ->
-        Control mark ctl (cont' . dynamicWind before after . cont)
+        Control mark ctl (cont' . dynamicWind' before after . cont)
+{-# INLINE dynamicWind #-}
+dynamicWind' = dynamicWind
+{-# NOINLINE dynamicWind' #-}
 
 -- | Lifted version of 'Exception.mask'.
 mask :: ((∀ x. Ctl x -> Ctl x) -> Ctl a) -> Ctl a

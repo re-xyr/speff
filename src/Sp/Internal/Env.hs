@@ -57,6 +57,7 @@ newtype Rec (f :: k -> Type) (es :: [k]) = Rec (Vec Any)
 -- | Get the length of the record.
 length :: Rec f es -> Int
 length (Rec vec) = Vec.length vec
+{-# INLINE length #-}
 
 unreifiable :: String -> String -> a
 unreifiable clsName comp = error $
@@ -71,15 +72,18 @@ unreifiable clsName comp = error $
 -- | Create an empty record. /O/(1).
 empty :: Rec f '[]
 empty = Rec Vec.empty
+{-# INLINE empty #-}
 
 -- | Prepend one entry to the record. /O/(/n/).
 cons :: f e -> Rec f es -> Rec f (e ': es)
 cons x (Rec vec) = Rec $ Vec.cons (toAny x) vec
+{-# INLINE cons #-}
 
 -- | Prepend one null entry to the record. This entry can be normally evaluated (different from 'undefined'), but any
 -- attempt to use it will cause a runtime error. /O/(/n/).
 pad :: Rec f es -> Rec f (e ': es)
-pad (Rec vec) = Rec $ Vec.pad 1 vec
+pad (Rec vec) = Rec $ Vec.pad vec
+{-# INLINE pad #-}
 
 -- | Type level list concatenation.
 type family (xs :: [k]) ++ (ys :: [k]) where
@@ -90,6 +94,7 @@ infixr 5 ++
 -- | Concatenate two records. /O/(/m/ + /n/).
 concat :: Rec f es -> Rec f es' -> Rec f (es ++ es')
 concat (Rec vec) (Rec vec') = Rec $ Vec.concat vec vec'
+{-# INLINE concat #-}
 
 --------------------------------------------------------------------------------
 -- Deconstruction --------------------------------------------------------------
@@ -98,10 +103,12 @@ concat (Rec vec) (Rec vec') = Rec $ Vec.concat vec vec'
 -- | Get the head of the record. /O/(1).
 head :: Rec f (e ': es) -> f e
 head (Rec vec) = fromAny $ Vec.head vec
+{-# INLINE head #-}
 
 -- | Slice off one entry from the top of the record. /O/(1).
 tail :: Rec f (e ': es) -> Rec f es
 tail (Rec vec) = Rec $ Vec.tail vec
+{-# INLINE tail #-}
 
 -- | The list @es@ list is concrete, i.e. is of the form @'[a1, a2, ..., an]@ therefore having a known length.
 class KnownList (es :: [k]) where
@@ -118,10 +125,12 @@ instance KnownList es => KnownList (e ': es) where
 -- | Slice off several entries from the top of the record. Amortized /O/(1).
 drop :: ∀ es es' f. KnownList es => Rec f (es ++ es') -> Rec f es'
 drop (Rec vec) = Rec $ Vec.drop (reifyLen @_ @es) vec
+{-# INLINE drop #-}
 
 -- | Take elements from the top of the record. /O/(/m/).
 take :: ∀ es es' f. KnownList es => Rec f (es ++ es') -> Rec f es
 take (Rec vec) = Rec $ Vec.take (reifyLen @_ @es) vec
+{-# INLINE take #-}
 
 --------------------------------------------------------------------------------
 -- Retrieval & Update ----------------------------------------------------------
@@ -148,10 +157,12 @@ instance TypeError (ElemNotFound e) => e :> '[] where
 -- | Get an element in the record. Amortized /O/(1).
 index :: ∀ e es f. e :> es => Rec f es -> f e
 index (Rec vec) = fromAny $ Vec.index (reifyIndex @_ @e @es) vec
+{-# INLINE index #-}
 
 -- | Update an entry in the record. /O/(/n/).
 update :: ∀ e es f. e :> es => f e -> Rec f es -> Rec f es
 update x (Rec vec) = Rec $ Vec.update (reifyIndex @_ @e @es) (toAny x) vec
+{-# INLINE update #-}
 
 --------------------------------------------------------------------------------
 -- Subset Operations -----------------------------------------------------------
@@ -174,6 +185,7 @@ instance {-# INCOHERENT #-} Suffix es es' => Suffix es (e : es') where
 -- | Get a suffix of the record. Amortized /O/(1).
 suffix :: ∀ es es' f. Suffix es es' => Rec f es' -> Rec f es
 suffix (Rec vec) = Rec $ Vec.drop (reifyPrefix @_ @es @es') vec
+{-# INLINE suffix #-}
 
 -- | Shorthand for @(e1 ':>' es, e2 :> es, e3 :> es, ...)@.
 type family AllMembers (es :: [k]) (es' :: [k]) :: Constraint where
@@ -195,6 +207,7 @@ instance (KnownSubset es es', e :> es') => KnownSubset (e ': es) es' where
 -- | Get a known subset of the record. Amortized /O/(/m/).
 pick :: ∀ es es' f. KnownSubset es es' => Rec f es' -> Rec f es
 pick (Rec vec) = Rec $ Vec.pick (reifyLen @_ @es) (reifyIndices @_ @es @es') vec
+{-# INLINE pick #-}
 
 -- | @es@ is a subset of @es'@. This works on both known lists and lists with polymorphic tails. E.g. all of the
 -- following work:

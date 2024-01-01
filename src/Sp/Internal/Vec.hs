@@ -38,7 +38,7 @@ nil :: a
 nil = error "Sp.Internal.Vec: uninitialized element"
 
 copyArrayOffset :: MutableArray s a -> Int -> Array a -> Int -> Int -> ST s ()
-copyArrayOffset marr ix arr off len = copyArray marr (ix - max 0 off) arr (max 0 off) len
+copyArrayOffset marr ix arr off len = copyArray marr (ix - min 0 off) arr (max 0 off) len
 
 indexArrayOffset :: Array a -> Int -> a
 indexArrayOffset arr ix
@@ -60,9 +60,9 @@ cons x (Vec off len arr) = Vec 0 (len + 1) $ runArray do
   copyArrayOffset marr 1 arr off len
   pure marr
 
--- | Prepend inaccessible entries to the vector. \( O(n) \).
-pad :: Int -> Vec a -> Vec a
-pad n (Vec off len arr) = Vec (off - n) (len + n) arr
+-- | Prepend an inaccessible entry to the vector. \( O(n) \).
+pad :: Vec a -> Vec a
+pad (Vec off len arr) = Vec (off - 1) (len + 1) arr
 
 -- | Concatenate two vectors. \( O(m+n) \).
 concat :: Vec a -> Vec a -> Vec a
